@@ -1,0 +1,25 @@
+paths:
+  nexus_inbox: "./nexus_inbox"
+  manual_inbox: "./manual_inbox"
+  raw: "./raw"
+  staging: "./staging"
+  wiki: "./wiki"
+
+zotero:
+  library_id: "${ZOTERO_LIBRARY_ID}"
+  library_type: "user"
+  api_key: "${ZOTERO_API_KEY}"
+
+extraction:
+  model: "gpt-4.1"
+  max_papers_per_batch: 50
+  max_tokens_per_request: 4096
+
+linking:
+  synthesis_model: "gpt-5"
+  style_model: "gpt-4.1"
+
+sync:
+  method: "rsync"
+  local_path: "~/Obsidian/ScholarWiki/"
+  remote_path: ""

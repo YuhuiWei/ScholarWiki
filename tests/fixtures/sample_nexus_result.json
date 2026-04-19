@@ -1,0 +1,45 @@
+{
+  "query": "attention mechanisms",
+  "domain_category": ["cs_ml"],
+  "params": {"query": "attention mechanisms", "top_n": 10},
+  "timestamp": "2026-04-09T08:00:00Z",
+  "sources_used": ["openalex"],
+  "sources_failed": [],
+  "papers": [
+    {
+      "paper_id": "a3f8c2e1d9b47f12",
+      "title": "Attention Is All You Need",
+      "abstract": "We propose the Transformer...",
+      "year": 2017,
+      "authors": ["Vaswani, A.", "Shazeer, N."],
+      "venue": "NeurIPS",
+      "doi": "10.48550/arXiv.1706.03762",
+      "arxiv_id": "1706.03762",
+      "domain_category": "cs_ml",
+      "domain_tags": ["transformers", "attention"],
+      "open_access_pdf_url": "https://arxiv.org/pdf/1706.03762",
+      "citation_count": 90000,
+      "sources": ["openalex"],
+      "download_status": "success",
+      "download_file_path": "/tmp/rank_01_attention_is_all_you_need.pdf"
+    },
+    {
+      "paper_id": "b4g9d3f2e0c58a23",
+      "title": "BERT: Pre-training of Deep Bidirectional Transformers",
+      "abstract": "...",
+      "year": 2019,
+      "authors": ["Devlin, J.", "Chang, M."],
+      "venue": "NAACL",
+      "doi": "10.18653/v1/N19-1423",
+      "arxiv_id": null,
+      "domain_category": "cs_ml",
+      "domain_tags": ["bert", "pretraining"],
+      "open_access_pdf_url": null,
+      "citation_count": 60000,
+      "sources": ["openalex"],
+      "download_status": "failed",
+      "download_file_path": null
+    }
+  ],
+  "not_found": false
+}

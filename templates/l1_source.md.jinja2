@@ -1,0 +1,43 @@
+---
+title: "{{ entry.title | replace('"', '\\"') }}"
+type: source
+paper_id: {{ entry.paper_id }}
+{% if entry.doi %}doi: "{{ entry.doi }}"{% endif %}
+{% if entry.arxiv_id %}arxiv_id: "{{ entry.arxiv_id }}"{% endif %}
+authors:
+{% for author in entry.authors %}  - "{{ author }}"
+{% endfor %}year: {{ entry.year or "unknown" }}
+venue: "{{ entry.venue or "" }}"
+domain_category: {{ entry.domain_category or "unknown" }}
+domain_tags:
+{% for tag in entry.domain_tags %}  - {{ tag }}
+{% endfor %}{% if entry.zotero_key %}zotero_key: "{{ entry.zotero_key }}"{% endif %}
+date_added: "{{ entry.ingested_at.strftime('%Y-%m-%d') }}"
+extraction_status: {{ entry.extraction_status }}
+---
+
+# {{ entry.title }}
+
+**Authors:** {{ entry.authors | join("; ") }}
+**Year:** {{ entry.year or "unknown" }} | **Venue:** {{ entry.venue or "unknown" }}
+{% if entry.doi %}**DOI:** [{{ entry.doi }}](https://doi.org/{{ entry.doi }}){% endif %}
+{% if entry.arxiv_id %}**arXiv:** [{{ entry.arxiv_id }}](https://arxiv.org/abs/{{ entry.arxiv_id }}){% endif %}
+
+## Summary
+<!-- Backfilled after LLM extraction -->
+_Pending extraction._
+
+## Knowledge Contributions
+<!-- Populated by linking pass -->
+
+## Research Relationships
+<!-- Populated by linking pass -->
+
+## Experimental Design
+<!-- Populated by linking pass -->
+
+## Writing Notes
+<!-- Populated by linking pass -->
+
+## Research Logic
+<!-- Populated by linking pass -->

@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.eggs/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Runtime directories (never commit data or API outputs)
+nexus_inbox/
+manual_inbox/
+raw/
+staging/
+wiki/
+
+# Secrets and local config overrides
+.env
+*.local.yaml
+*.local.json
+
+# Claude Code internals
+.claude/
+CLAUDE.md
+
+# OS
+.DS_Store

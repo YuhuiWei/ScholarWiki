@@ -1,0 +1,26 @@
+---
+title: "{{ title }}"
+type: writing_style
+venue: "{{ venue }}"
+confidence: {{ confidence }}
+topic_tags:
+{% for tag in topic_tags %}  - {{ tag }}
+{% endfor %}papers_analyzed:
+{% for paper in papers_analyzed %}  - "{{ paper }}"
+{% endfor %}last_updated: "{{ last_updated }}"
+---
+
+# {{ title }}
+
+## Structural conventions
+
+{% for block in structural_blocks %}
+{{ block }}
+
+{% endfor %}
+## Prose and tone
+
+{% for block in prose_blocks %}
+{{ block }}
+
+{% endfor %}

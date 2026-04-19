@@ -1,0 +1,27 @@
+---
+title: "{{ title }}"
+type: concept
+domain_tags:
+{% for tag in domain_tags %}  - {{ tag }}
+{% endfor %}source_papers:
+{% for paper in source_papers %}  - "{{ paper }}"
+{% endfor %}last_updated: "{{ last_updated }}"
+---
+
+# {{ title }}
+
+## Key findings
+
+{% for finding in findings %}
+{{ finding }}
+
+{% endfor %}
+## Contradictions
+
+{% for contradiction in contradictions %}
+- {{ contradiction }}
+{% endfor %}
+
+## Research trajectory
+
+{{ research_trajectory }}

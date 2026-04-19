@@ -1,0 +1,49 @@
+---
+title: "Suggested papers"
+type: meta
+last_updated: "{{ last_updated }}"
+---
+
+# Suggested papers
+
+Papers referenced by your knowledge base but not yet downloaded.
+
+{% if high_priority %}
+## High priority (referenced by 3+ papers)
+
+{% for paper in high_priority %}
+### {{ paper.title }}
+- **Likely DOI:** {{ paper.doi or "unknown" }}
+- **Referenced by:** {% for ref in paper.referenced_by %}[[{{ ref }}]]{% if not loop.last %}, {% endif %}{% endfor %}
+
+- **Relationship types:** {{ paper.relationship_types | join(", ") }}
+- **Quick add:** `nexus fetch {% if paper.doi %}--doi "{{ paper.doi }}"{% else %}"{{ paper.search_query }}"{% endif %} --download`
+
+{% endfor %}
+{% endif %}
+{% if medium_priority %}
+## Medium priority (referenced by 2 papers)
+
+{% for paper in medium_priority %}
+### {{ paper.title }}
+- **Likely DOI:** {{ paper.doi or "unknown" }}
+- **Referenced by:** {% for ref in paper.referenced_by %}[[{{ ref }}]]{% if not loop.last %}, {% endif %}{% endfor %}
+
+- **Relationship types:** {{ paper.relationship_types | join(", ") }}
+- **Quick add:** `nexus fetch {% if paper.doi %}--doi "{{ paper.doi }}"{% else %}"{{ paper.search_query }}"{% endif %} --download`
+
+{% endfor %}
+{% endif %}
+{% if low_priority %}
+## Low priority (referenced by 1 paper)
+
+{% for paper in low_priority %}
+### {{ paper.title }}
+- **Likely DOI:** {{ paper.doi or "unknown" }}
+- **Referenced by:** {% for ref in paper.referenced_by %}[[{{ ref }}]]{% if not loop.last %}, {% endif %}{% endfor %}
+
+- **Relationship types:** {{ paper.relationship_types | join(", ") }}
+- **Quick add:** `nexus fetch {% if paper.doi %}--doi "{{ paper.doi }}"{% else %}"{{ paper.search_query }}"{% endif %} --download`
+
+{% endfor %}
+{% endif %}

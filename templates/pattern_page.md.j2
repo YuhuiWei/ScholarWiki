@@ -1,0 +1,28 @@
+---
+title: "{{ title }}"
+type: pattern
+confidence: {{ confidence }}
+domain_tags:
+{% for tag in domain_tags %}  - {{ tag }}
+{% endfor %}papers_using:
+{% for paper in papers_using %}  - "{{ paper }}"
+{% endfor %}last_updated: "{{ last_updated }}"
+---
+
+# {{ title }}
+
+## Logic pattern
+
+{{ logic_description }}
+
+## Experimental implementations
+
+{% for impl in implementations %}
+{{ impl }}
+
+{% endfor %}
+## Common pitfalls observed
+
+{% for pitfall in pitfalls %}
+- {{ pitfall }}
+{% endfor %}
