@@ -11,6 +11,7 @@ from ..config import Config
 from ..models import PaperEntry, Registry
 from ..registry import save_registry
 from .backfill import backfill_source_page
+from .pending_concepts import resolve_concepts_for_linking, save_pending
 from .concept_match import list_concept_index, slug_from_title
 from .design_patterns import cluster_patterns, write_pattern_page
 from .knowledge_hypergraph import write_concept_page
@@ -133,7 +134,7 @@ def _build_concept_request(
                 {"role": "system", "content": CONCEPT_SYNTHESIS_SYSTEM},
                 {"role": "user", "content": user_content},
             ],
-            "max_tokens": 4096,
+            "max_completion_tokens": 4096,
         },
     }
 
@@ -178,7 +179,7 @@ def _build_pattern_request(
                 {"role": "system", "content": PATTERN_SYNTHESIS_SYSTEM},
                 {"role": "user", "content": user_content},
             ],
-            "max_tokens": 4096,
+            "max_completion_tokens": 4096,
         },
     }
 
@@ -229,7 +230,7 @@ def _build_style_request(
                 {"role": "system", "content": STYLE_SYNTHESIS_SYSTEM},
                 {"role": "user", "content": user_content},
             ],
-            "max_tokens": 4096,
+            "max_completion_tokens": 4096,
         },
     }
 
@@ -295,6 +296,16 @@ async def submit_link_batches(
                     and idx < len(roadmap_edges)
                 ],
             })
+
+    # Step 2b: Filter concept_groups through pending ledger — only synthesize
+    # concepts that appear in ≥ min_papers_for_concept papers.
+    concepts_to_link, updated_pending = resolve_concepts_for_linking(
+        staging_dir, min_papers=cfg.linking.min_papers_for_concept
+    )
+    concept_groups = {
+        slug: group for slug, group in concept_groups.items()
+        if group["concept_name"] in concepts_to_link
+    }
 
     # Step 3: Cluster design patterns (synchronous GPT-5 call)
     pattern_input = []
@@ -366,7 +377,7 @@ async def submit_link_batches(
             "url": "/v1/chat/completions",
             "body": {"model": synthesis_model,
                      "messages": [{"role": "user", "content": "Say OK"}],
-                     "max_tokens": 5},
+                     "max_completion_tokens": 5},
         })
     if not gpt41_requests:
         gpt41_requests.append({
@@ -375,7 +386,7 @@ async def submit_link_batches(
             "url": "/v1/chat/completions",
             "body": {"model": style_model,
                      "messages": [{"role": "user", "content": "Say OK"}],
-                     "max_tokens": 5},
+                     "max_completion_tokens": 5},
         })
 
     gpt5_batch_id = await _upload_and_submit(
@@ -384,6 +395,9 @@ async def submit_link_batches(
     gpt41_batch_id = await _upload_and_submit(
         client, gpt41_requests, style_model, "link_gpt41.jsonl"
     )
+
+    # Save updated pending ledger (promoted concepts removed)
+    save_pending(staging_dir, updated_pending)
 
     # Write batch IDs to registry
     submitted_ids = {entry.paper_id for entry in papers}
@@ -469,6 +483,7 @@ async def collect_link_batches(
 
     # Download and process all batch outputs (reuse cached batch objects)
     processed_batch_ids: set[str] = set()
+    any_output = False
 
     for gpt5_id, gpt41_id in batch_pairs:
         for batch_id in [gpt5_id, gpt41_id]:
@@ -477,6 +492,15 @@ async def collect_link_batches(
             processed_batch_ids.add(batch_id)
 
             batch = retrieved_batches[batch_id]
+            if not batch.output_file_id:
+                rc = batch.request_counts
+                result.errors.append(
+                    f"Batch {batch_id} has no output file "
+                    f"(completed={rc.completed}, failed={rc.failed}, total={rc.total}). "
+                    "All requests may have failed — check model name in config.yaml."
+                )
+                continue
+            any_output = True
             file_content = await client.files.content(batch.output_file_id)
 
             for line in file_content.text.strip().split("\n"):
@@ -513,6 +537,10 @@ async def collect_link_batches(
                 elif custom_id.startswith("style_"):
                     slug = custom_id[len("style_"):]
                     write_style_page(wiki_dir, slug, markdown)
+
+    # If every batch had no output file, abort without marking papers linked
+    if not any_output:
+        return result
 
     # Backfill source pages and mark papers as linked
     for paper_id, entry in registry.papers.items():

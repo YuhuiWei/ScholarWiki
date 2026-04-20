@@ -12,6 +12,7 @@ from ..linking.concept_match import list_concept_index
 from ..models import PaperEntry, Registry
 from ..registry import save_registry
 from .concept_mapping import generate_concept_mapping
+from ..linking.pending_concepts import update_pending_from_mappings
 from .l1_aggregator import aggregate_l1_profile, update_source_page_summary
 from .prompts.experiment import MODULE_NAME as EXPERIMENT_MODULE
 from .prompts.experiment import SYSTEM_PROMPT as EXPERIMENT_PROMPT
@@ -66,7 +67,7 @@ def _build_request(paper_id: str, module_name: str, system_prompt: str,
                 {"role": "user", "content": text},
             ],
             "response_format": {"type": "json_object"},
-            "max_tokens": max_tokens,
+            "max_completion_tokens": max_tokens,
         },
     }
 
@@ -171,6 +172,7 @@ async def collect_batch(
 
     # Process each paper
     concept_index = list_concept_index(wiki_dir / "concepts")
+    collected_paper_ids: list[str] = []
     for paper_id, modules in paper_modules.items():
         if paper_id not in registry.papers:
             continue
@@ -207,9 +209,13 @@ async def collect_batch(
             tmp.replace(paper_staging / "concept_mapping.json")
 
             entry.extraction_status = "extracted"
+            collected_paper_ids.append(paper_id)
         else:
             result.partial += 1
             result.failed_modules[paper_id] = still_missing
+
+    if collected_paper_ids:
+        update_pending_from_mappings(staging_dir, collected_paper_ids)
 
     save_registry(registry, raw_dir)
     return result

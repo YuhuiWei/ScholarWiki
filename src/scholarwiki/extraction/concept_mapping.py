@@ -1,8 +1,118 @@
 from __future__ import annotations
 import json
+import re
 from pathlib import Path
 
+from rapidfuzz import fuzz
 from ..linking.concept_match import match_concept
+
+# Patterns that indicate a value is a paper citation, not a concept name.
+# e.g. "Vaswani et al. 2017 — Attention Is All You Need"
+#      "Lopez et al. 2018"
+#      "CLIP — Radford et al. 2021"
+_CITATION_RE = re.compile(
+    r"et al\.[\s,]|\b(19|20)\d{2}\b.*—|—.*\b(19|20)\d{2}\b|\b(19|20)\d{2}\s*$"
+)
+
+
+def _is_citation(name: str) -> bool:
+    """Return True if the string looks like a paper citation rather than a concept."""
+    return bool(_CITATION_RE.search(name))
+
+
+# Terms that describe HOW research is done, not WHAT it's about.
+# Routed to pattern_signals.methodological_tags instead of concept_contributions.
+METHODOLOGICAL_TERMS: frozenset[str] = frozenset({
+    # Evaluation approach
+    "benchmarking", "benchmark datasets", "benchmark creation",
+    "model benchmarking", "performance benchmarks",
+    "evaluation methodology", "domain-specific evaluation",
+    "diagnostic metrics",
+    # Experimental methodology
+    "ablation studies", "data ablation",
+    "model comparison", "model evaluation",
+    "model selection guidance",
+    # Quality dimensions
+    "generalization", "cross-domain generalization",
+    "out-of-distribution generalization", "cross-task generalization",
+    "scalability", "model robustness",
+    "reproducibility", "research reproducibility",
+    "calibration",
+    # Efficiency dimensions
+    "computational efficiency", "training efficiency",
+    "inference efficiency", "parameter efficiency",
+    "data efficiency", "sample efficiency",
+    "llm efficiency", "llm inference cost",
+    # Data methodology
+    "data quality", "data quality control",
+    "data preprocessing", "noise filtering",
+    "dataset curation",
+    # Training methodology
+    "training stability", "training stabilization",
+    "model initialization", "compute optimization",
+    # Generic outcome terms
+    "state-of-the-art performance", "classification",
+    "imbalanced classification", "multiclass classification",
+})
+
+
+def _is_methodological(name: str) -> bool:
+    """Return True if the concept is a methodological term, not a topical concept."""
+    return name.lower() in METHODOLOGICAL_TERMS
+
+
+def _normalize(name: str) -> str:
+    """Normalize a concept name for deduplication comparison."""
+    # lowercase, collapse hyphens/spaces, strip trailing 's'
+    n = name.lower()
+    n = re.sub(r"[-\s]+", " ", n).strip()
+    return n
+
+
+def _deduplicate_concepts(concept_refs: dict[str, dict]) -> dict[str, dict]:
+    """
+    Merge near-duplicate concept names into a canonical representative.
+
+    Uses a two-pass approach:
+    1. Exact match after normalization (catches pre-training/pretraining, etc.)
+    2. Fuzzy token_sort_ratio >= 92 (catches chain-of-thought/chain-of-thought reasoning)
+
+    The first name encountered (insertion order) is kept as canonical.
+    """
+    canonical: dict[str, str] = {}  # normalized_key → canonical original name
+    merged: dict[str, dict] = {}    # canonical name → merged refs
+
+    for name, refs in concept_refs.items():
+        norm = _normalize(name)
+
+        # Check for exact normalized match first
+        if norm in canonical:
+            canon = canonical[norm]
+            merged[canon]["knowledge_items"].extend(refs["knowledge_items"])
+            merged[canon]["roadmap_edges"].extend(refs["roadmap_edges"])
+            continue
+
+        # Check for fuzzy match against already-seen canonical names
+        best_canon = None
+        best_score = 0
+        for seen_norm, seen_canon in canonical.items():
+            score = fuzz.token_sort_ratio(norm, seen_norm)
+            if score > best_score:
+                best_score = score
+                best_canon = seen_canon
+
+        if best_canon and best_score >= 92:
+            merged[best_canon]["knowledge_items"].extend(refs["knowledge_items"])
+            merged[best_canon]["roadmap_edges"].extend(refs["roadmap_edges"])
+            canonical[norm] = best_canon
+        else:
+            canonical[norm] = name
+            merged[name] = {
+                "knowledge_items": list(refs["knowledge_items"]),
+                "roadmap_edges": list(refs["roadmap_edges"]),
+            }
+
+    return merged
 
 
 def _load_json(path: Path) -> dict:
@@ -35,27 +145,38 @@ def generate_concept_mapping(
     logic = _load_json(staging_paper_dir / "logic.json")
     writing = _load_json(staging_paper_dir / "writing.json")
 
-    # Collect concept → {knowledge_items, roadmap_edges} mapping
-    # Use insertion order via dict to deduplicate concept names
+    # Collect concept → {knowledge_items, roadmap_edges} mapping.
+    # Only knowledge items drive concept page creation.
+    # Roadmap edges are citation relationships (paper → paper) — they enrich
+    # existing concepts as context but never create new concept pages.
     concept_refs: dict[str, dict] = {}
+    methodological_tags: list[str] = []
 
     for item in knowledge.get("knowledge_items", []):
         item_id = item.get("id", "")
         for concept_name in item.get("related_concepts", []):
-            if not concept_name:
+            if not concept_name or _is_citation(concept_name):
+                continue
+            if _is_methodological(concept_name):
+                if concept_name not in methodological_tags:
+                    methodological_tags.append(concept_name)
                 continue
             if concept_name not in concept_refs:
                 concept_refs[concept_name] = {"knowledge_items": [], "roadmap_edges": []}
             if item_id:
                 concept_refs[concept_name]["knowledge_items"].append(item_id)
 
+    # Attach roadmap edges only to concepts already identified above.
     for i, edge in enumerate(roadmap.get("relationships", [])):
-        concept_name = edge.get("target_entity", "")
-        if not concept_name:
+        target = edge.get("target_entity", "")
+        if not target or _is_citation(target):
             continue
-        if concept_name not in concept_refs:
-            concept_refs[concept_name] = {"knowledge_items": [], "roadmap_edges": []}
-        concept_refs[concept_name]["roadmap_edges"].append(f"r{i}")
+        # Only enrich existing concepts, never create new ones from roadmap edges.
+        if target in concept_refs:
+            concept_refs[target]["roadmap_edges"].append(f"r{i}")
+
+    # Merge near-duplicates within this paper's concept list
+    concept_refs = _deduplicate_concepts(concept_refs)
 
     # Fuzzy-match each concept against existing wiki pages
     concept_contributions = []
@@ -86,6 +207,7 @@ def generate_concept_mapping(
         "concept_contributions": concept_contributions,
         "pattern_signals": {
             "logic_pattern": logic.get("logic_pattern", ""),
+            "methodological_tags": methodological_tags,
         },
         "writing_signals": {
             "venue": writing.get("venue", "") or "",

@@ -7,7 +7,7 @@ from enum import Enum
 from pathlib import Path
 
 from .config import Config
-from .extraction.batch import get_batch_status, collect_batch, submit_batch
+from .extraction.batch import get_batch_status, collect_batch, submit_batch, retry_failed_modules
 from .ingest.nexus import ingest_nexus_inbox
 from .ingest.manual import ingest_manual_inbox
 from .linking.batch import submit_link_batches, collect_link_batches
@@ -195,6 +195,21 @@ async def run_pipeline(
                 f"Extracted: {collect_result.extracted}  Partial: {collect_result.partial}"
             )
             reg = load_registry(cfg.paths.raw)
+
+            if collect_result.partial > 0:
+                on_status(
+                    f"{collect_result.partial} paper(s) had failed modules — "
+                    "submitting retry batch..."
+                )
+                retry_result = await retry_failed_modules(reg, cfg.paths.raw, cfg)
+                if retry_result.batch_id:
+                    on_status(
+                        f"Retry batch {retry_result.batch_id}: "
+                        f"{retry_result.request_count} request(s)."
+                    )
+                    reg = load_registry(cfg.paths.raw)
+                else:
+                    on_status("Nothing to retry — skipping.")
 
         elif state.current_step == PipelineStep.SUBMIT_LINKING:
             extracted = [

@@ -41,6 +41,7 @@ class ExtractionConfig(BaseModel):
 class LinkingConfig(BaseModel):
     synthesis_model: str = "gpt-5"   # GPT-5 for concept + pattern synthesis
     style_model: str = "gpt-4.1"     # GPT-4.1 for writing style synthesis
+    min_papers_for_concept: int = 2  # concepts seen in fewer papers stay pending
 
 
 class SyncConfig(BaseModel):

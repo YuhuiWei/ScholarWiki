@@ -258,6 +258,7 @@ def process_batch_cmd(
     continue_: bool = typer.Option(False, "--continue", help="Resume from current state"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show next step without executing"),
     timeout: str = typer.Option("6h", "--timeout", help="Max wait time (e.g., 6h, 30m, 3600)"),
+    notify: Optional[str] = typer.Option(None, "--notify", help="Email address to notify when pipeline finishes"),
 ) -> None:
     """Full pipeline: ingest → extract → link. Chains all steps automatically."""
     from .pipeline import run_pipeline, parse_timeout
@@ -276,18 +277,61 @@ def process_batch_cmd(
     should_wait = wait or continue_
     timeout_seconds = parse_timeout(timeout)
 
-    completed = asyncio.run(
-        run_pipeline(
-            cfg,
-            wait=should_wait,
-            timeout_seconds=timeout_seconds,
-            dry_run=dry_run,
-            on_status=typer.echo,
+    outcome = "completed"
+    completed = False
+    try:
+        completed = asyncio.run(
+            run_pipeline(
+                cfg,
+                wait=should_wait,
+                timeout_seconds=timeout_seconds,
+                dry_run=dry_run,
+                on_status=typer.echo,
+            )
         )
-    )
+        if not completed:
+            outcome = "paused"
+    except Exception as exc:
+        outcome = f"failed: {exc}"
+        typer.echo(f"Pipeline error: {exc}", err=True)
 
     if not completed and not dry_run:
         typer.echo("Pipeline paused. Run with --continue to resume.")
+
+    if notify and not dry_run:
+        from .notify import send_notification
+        from .registry import load_registry as _load_reg
+        reg = _load_reg(cfg.paths.raw)
+        s = reg.stats
+        if outcome == "completed":
+            subject = "ScholarWiki: pipeline complete"
+            body = (
+                f"Your ScholarWiki pipeline finished successfully.\n\n"
+                f"Papers linked:    {s.linked}\n"
+                f"Papers extracted: {s.extracted}\n"
+                f"Papers pending:   {s.pending_extraction}\n\n"
+                f"Open wiki/ in Obsidian to browse the results.\n"
+            )
+        elif outcome == "paused":
+            subject = "ScholarWiki: pipeline paused (batch still running)"
+            body = (
+                f"The pipeline submitted its batches and is waiting for OpenAI to finish.\n\n"
+                f"Run the following to resume when ready:\n"
+                f"  scholarwiki process-batch --continue --notify {notify}\n\n"
+                f"Current status — linked: {s.linked}, extracted: {s.extracted}, "
+                f"submitted: {s.submitted}, pending: {s.pending_extraction}\n"
+            )
+        else:
+            subject = "ScholarWiki: pipeline error"
+            body = (
+                f"The pipeline encountered an error:\n\n  {outcome}\n\n"
+                f"Run 'scholarwiki status' to check the current state.\n"
+            )
+        try:
+            send_notification(to=notify, subject=subject, body=body)
+            typer.echo(f"Notification sent to {notify}.")
+        except Exception as exc:
+            typer.echo(f"Could not send notification: {exc}", err=True)
 
 
 @app.command()

@@ -42,7 +42,8 @@ def test_existing_concept_fuzzy_matched(tmp_path):
     assert c["matched_page"] == "batch_correction_in_scrna_seq"
 
 
-def test_roadmap_edges_captured(tmp_path):
+def test_roadmap_citation_not_a_concept(tmp_path):
+    """Roadmap target entities that look like citations should not become concept pages."""
     _write_staging(tmp_path, roadmap={
         "relationships": [
             {"target_entity": "scVI (Lopez et al., 2018)", "relationship_type": "extends",
@@ -50,12 +51,32 @@ def test_roadmap_edges_captured(tmp_path):
         ]
     })
     result = generate_concept_mapping("paper_abc", tmp_path, concept_index=[])
+    names = [c["concept_name"] for c in result["concept_contributions"]]
+    assert "scVI (Lopez et al., 2018)" not in names
+
+
+def test_roadmap_edges_enrich_existing_concept(tmp_path):
+    """Roadmap edges should enrich a concept already identified from knowledge items."""
+    _write_staging(tmp_path,
+        knowledge={
+            "knowledge_items": [
+                {"id": "k1", "claim": "X", "evidence": "", "confidence": "high",
+                 "related_concepts": ["variational autoencoder"]}
+            ]
+        },
+        roadmap={
+            "relationships": [
+                {"target_entity": "variational autoencoder", "relationship_type": "uses",
+                 "description": "uses VAE", "significance": "high"}
+            ]
+        },
+    )
+    result = generate_concept_mapping("paper_abc", tmp_path, concept_index=[])
     contribs = result["concept_contributions"]
-    # roadmap target entity should appear as a concept contribution
     names = [c["concept_name"] for c in contribs]
-    assert "scVI (Lopez et al., 2018)" in names
-    scvi = next(c for c in contribs if c["concept_name"] == "scVI (Lopez et al., 2018)")
-    assert "r0" in scvi["roadmap_edges"]
+    assert "variational autoencoder" in names
+    vae = next(c for c in contribs if c["concept_name"] == "variational autoencoder")
+    assert "r0" in vae["roadmap_edges"]
 
 
 def test_pattern_signals_captured(tmp_path):
@@ -101,3 +122,60 @@ def test_concept_deduplication(tmp_path):
     bc = next(c for c in result["concept_contributions"] if c["concept_name"] == "batch correction")
     assert "k1" in bc["knowledge_items"]
     assert "k2" in bc["knowledge_items"]
+
+
+def test_methodological_terms_routed_to_pattern_signals(tmp_path):
+    """Methodological terms go to pattern_signals, not concept_contributions."""
+    _write_staging(tmp_path, knowledge={
+        "knowledge_items": [
+            {"id": "k1", "claim": "Scales to 1M cells", "evidence_type": "experimental",
+             "confidence": "high", "supporting_data": None, "domain_tags": [],
+             "related_concepts": ["scalability", "single-cell analysis"],
+             "quantitative_result": None},
+            {"id": "k2", "claim": "Ablation confirms attention is key",
+             "evidence_type": "experimental", "confidence": "high",
+             "supporting_data": None, "domain_tags": [],
+             "related_concepts": ["ablation studies", "attention mechanism"],
+             "quantitative_result": None},
+        ]
+    })
+    result = generate_concept_mapping("paper_abc", tmp_path, concept_index=[])
+
+    concept_names = [c["concept_name"] for c in result["concept_contributions"]]
+    method_tags = result["pattern_signals"]["methodological_tags"]
+
+    assert "single-cell analysis" in concept_names
+    assert "attention mechanism" in concept_names
+    assert "scalability" in method_tags
+    assert "ablation studies" in method_tags
+    assert "scalability" not in concept_names
+    assert "ablation studies" not in concept_names
+
+
+def test_methodological_routing_case_insensitive(tmp_path):
+    """Routing should be case-insensitive."""
+    _write_staging(tmp_path, knowledge={
+        "knowledge_items": [
+            {"id": "k1", "claim": "X", "evidence_type": "experimental", "confidence": "high",
+             "supporting_data": None, "domain_tags": [],
+             "related_concepts": ["Benchmarking", "SCALABILITY", "real concept"],
+             "quantitative_result": None},
+        ]
+    })
+    result = generate_concept_mapping("paper_abc", tmp_path, concept_index=[])
+
+    concept_names = [c["concept_name"] for c in result["concept_contributions"]]
+    method_tags = result["pattern_signals"]["methodological_tags"]
+
+    assert "real concept" in concept_names
+    assert "Benchmarking" not in concept_names
+    assert "SCALABILITY" not in concept_names
+    assert len(method_tags) == 2
+
+
+def test_pattern_signals_always_has_methodological_tags(tmp_path):
+    """methodological_tags key is always present, even if empty."""
+    _write_staging(tmp_path)
+    result = generate_concept_mapping("paper_abc", tmp_path, concept_index=[])
+    assert "methodological_tags" in result["pattern_signals"]
+    assert result["pattern_signals"]["methodological_tags"] == []

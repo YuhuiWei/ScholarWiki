@@ -98,9 +98,14 @@ def run_lint(wiki_dir: Path, registry: Registry) -> LintReport:
                 ))
 
     # 4. Missing source pages — linked papers without a wiki source page on disk
+    # wiki_source_page may be relative to project root ("wiki/sources/foo.md")
+    # or relative to wiki_dir ("sources/foo.md") — try both.
     for paper_id, entry in registry.papers.items():
         if entry.extraction_status == "linked" and entry.wiki_source_page:
-            page_path = wiki_dir / entry.wiki_source_page
+            candidate = wiki_dir.parent / entry.wiki_source_page
+            if not candidate.exists():
+                candidate = wiki_dir / entry.wiki_source_page
+            page_path = candidate
             if not page_path.exists():
                 report.issues.append(LintIssue(
                     severity="error",
