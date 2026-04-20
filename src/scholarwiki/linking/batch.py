@@ -12,6 +12,7 @@ from ..models import PaperEntry, Registry
 from ..registry import save_registry
 from .backfill import backfill_source_page
 from .pending_concepts import resolve_concepts_for_linking, save_pending
+from .pending_styles import resolve_styles_for_linking, save_pending_styles
 from .concept_match import list_concept_index, slug_from_title
 from .design_patterns import cluster_patterns, write_pattern_page
 from .knowledge_hypergraph import write_concept_page
@@ -21,7 +22,7 @@ from .synthesis_prompts import (
     PATTERN_SYNTHESIS_SYSTEM,
     STYLE_SYNTHESIS_SYSTEM,
 )
-from .writing_styles import cluster_writing_styles, write_style_page
+from .writing_styles import write_style_page
 
 
 class LinkBatchSubmitResult(BaseModel):
@@ -155,11 +156,21 @@ def _build_pattern_request(
         paper_slug = _paper_slug(entry) if entry else pid
         logic = _load_staging_json(staging_dir / pid / "logic.json")
         experiment = _load_staging_json(staging_dir / pid / "experiment.json")
+        mapping = _load_staging_json(staging_dir / pid / "concept_mapping.json")
+        ps = mapping.get("pattern_signals", {})
+        pipeline_steps = experiment.get("experimental_pipeline", [])
+        step_summary = "; ".join(
+            f"{s.get('action', '')}: {s.get('details', '')}" if s.get("details") else s.get("action", "")
+            for s in pipeline_steps[:5]
+            if s.get("action")
+        )
+        controls = ", ".join(c.get("control_type", "") for c in experiment.get("controls", []) if c.get("control_type"))
         papers_text += (
             f"\n[[{paper_slug}]]\n"
             f"  Logic: {logic.get('logic_pattern', '')}\n"
-            f"  Pipeline steps: {len(experiment.get('experimental_pipeline', []))}\n"
-            f"  Controls: {', '.join(c.get('control_type', '') for c in experiment.get('controls', []))}\n"
+            f"  Pipeline: {step_summary or '(none)'}\n"
+            f"  Controls: {controls or '(none)'}\n"
+            f"  Methodological tags: {', '.join(ps.get('methodological_tags', [])) or '(none)'}\n"
         )
 
     user_content = (
@@ -311,27 +322,22 @@ async def submit_link_batches(
     pattern_input = []
     for paper_id, mapping in paper_mappings.items():
         entry = registry.papers.get(paper_id)
+        ps = mapping.get("pattern_signals", {})
         pattern_input.append({
             "paper_id": paper_id,
             "title": entry.title if entry else paper_id,
-            "logic_pattern": mapping.get("pattern_signals", {}).get("logic_pattern", ""),
+            "logic_pattern": ps.get("logic_pattern", ""),
+            "key_experiment_summary": ps.get("key_experiment_summary", ""),
+            "methodological_tags": ps.get("methodological_tags", []),
         })
 
     existing_pattern_index = list_concept_index(wiki_dir / "patterns")
     pattern_clusters = await cluster_patterns(pattern_input, existing_pattern_index, cfg)
 
-    # Step 4: Cluster writing styles (programmatic Jaccard)
-    style_input = []
-    for paper_id, mapping in paper_mappings.items():
-        ws = mapping.get("writing_signals", {})
-        style_input.append({
-            "paper_id": paper_id,
-            "venue": ws.get("venue", ""),
-            "topic_area": ws.get("topic_area", ""),
-            "topic_tags": ws.get("topic_tags") or [ws.get("topic_area", "general")],
-        })
-
-    style_clusters = cluster_writing_styles(style_input)
+    # Step 4: Cluster writing styles via pending ledger (only groups with >=min_papers_for_style)
+    style_clusters, updated_pending_styles = resolve_styles_for_linking(
+        staging_dir, min_papers=cfg.linking.min_papers_for_style
+    )
 
     # Step 5: Build GPT-5 batch requests (concepts + patterns)
     gpt5_requests: list[dict] = []
@@ -396,8 +402,9 @@ async def submit_link_batches(
         client, gpt41_requests, style_model, "link_gpt41.jsonl"
     )
 
-    # Save updated pending ledger (promoted concepts removed)
+    # Save updated pending ledgers (promoted entries removed)
     save_pending(staging_dir, updated_pending)
+    save_pending_styles(staging_dir, updated_pending_styles)
 
     # Write batch IDs to registry
     submitted_ids = {entry.paper_id for entry in papers}

@@ -4,21 +4,31 @@ from __future__ import annotations
 # ─── Pattern clustering ────────────────────────────────────────────────────────
 
 PATTERN_CLUSTER_SYSTEM = """\
-You are grouping academic papers by their experimental design pattern.
+You are grouping academic papers by their specific experimental methodology.
 
 You will receive:
 1. A list of existing pattern pages (slug: title)
-2. A list of papers, each with paper_id, title, and logic_pattern
+2. A list of papers, each with paper_id, title, logic_pattern, key_experiment_summary, \
+and methodological_tags
 
-logic_pattern is a free-text label like "premise → innovation → validation" or
-"gap_analysis → novel_method → comparative_study". Different phrasings can describe
-the same fundamental experimental approach.
+key_experiment_summary: ordered pipeline steps describing HOW the experiment was conducted.
+methodological_tags: terms describing specific experimental techniques used.
 
 Your task:
-1. Group papers that follow the same fundamental experimental logic, even if worded differently.
-2. Assign papers to existing pattern pages where the fit is strong.
-3. Propose new pattern slugs for papers that don't fit existing pages — but ONLY if >=2 papers share the pattern.
-4. Papers that don't cluster with at least one other paper go in "unassigned".
+1. Group papers that use the SAME SPECIFIC EXPERIMENTAL APPROACH, regardless of research domain.
+   Focus on the concrete method (e.g. "perturbation + transcriptomic readout", \
+"held-out benchmark comparison", "multi-cohort replication + ablation", \
+"synthetic dataset generation + cross-model evaluation").
+2. Assign papers to existing pattern pages where the fit is strong (exact method match).
+3. Propose new pattern slugs ONLY if >=2 papers share a specific methodology.
+4. Papers without a matching group go in "unassigned".
+
+Cluster by HOW the experiment is conducted, not WHAT domain it's in:
+- Too abstract: "validation_study", "novel_method_benchmark", "problem_solving"
+- Concrete: "perturbation_transcriptome_analysis", "multi_benchmark_ablation", \
+"synthetic_data_comparative_evaluation"
+
+Aim for 3-8 concrete clusters per run.
 
 Return JSON exactly:
 {
@@ -32,7 +42,7 @@ Return JSON exactly:
 }
 
 Rules:
-- Pattern slugs: lowercase, underscore-separated, <=5 words
+- Pattern slugs: lowercase, underscore-separated, <=5 words, describe the METHOD not the domain
 - A paper appears in exactly one assignment or in unassigned — never both
 - Only include assignments with >=2 papers; single-paper groups go to unassigned
 """
@@ -91,14 +101,15 @@ Rules:
 # ─── Design pattern page synthesis (GPT-5) ────────────────────────────────────
 
 PATTERN_SYNTHESIS_SYSTEM = """\
-You are writing a wiki page for a research design pattern used by a scientific knowledge base.
+You are writing a wiki page for a specific experimental methodology used across multiple research papers.
 
-A design pattern is an abstract experimental logic that multiple papers implement concretely in different ways.
+A methodology pattern is a concrete experimental approach that researchers can recognize and apply, \
+independent of research domain.
 
 You will receive:
 1. The pattern slug and title
 2. The existing page content (if any)
-3. Papers using this pattern: their logic_pattern, reasoning chain, experimental pipeline, controls
+3. Papers using this pattern: their experimental pipeline steps, controls, and logic pattern
 
 The page MUST have this structure:
 
@@ -106,38 +117,53 @@ The page MUST have this structure:
 title: "{pattern_title}"
 type: pattern
 confidence: high
-domain_tags: [<2-4 relevant tags>]
+method_tags: [<2-4 concrete method tags, e.g. perturbation, transcriptomics, ablation>]
 papers_using: [<[[paper_slug]] for each paper>]
 last_updated: "{today}"
 ---
 
 # {pattern_title}
 
-## What this pattern is
-Define the abstract experimental logic in 2-3 sentences. What is the fundamental approach?
+## What this methodology is
+Describe the concrete experimental approach in 2-4 sentences. Name the specific steps, \
+instruments, or procedures that define it — not abstract logic.
 
-## When to use it
-What scientific questions is this pattern suited for? What conditions make it appropriate?
+## When researchers use this approach
+What scientific questions require this methodology? What data or conditions make it appropriate? \
+What does it enable that simpler approaches cannot?
 
-## How papers implement it
-For each paper, describe HOW they used this pattern — what made their implementation distinctive.
-Use [[paper_slug]] citations.
+## How each paper implements it
+For each paper, describe the specific implementation choices: what they measured, how they \
+controlled for confounders, what computational steps they used. Use [[paper_slug]] citations.
+Show variation across implementations — what differs, what stays constant.
 
-## Common pitfalls
-What can go wrong? What do the papers collectively reveal about failure modes?
+## Practical considerations
+What reagents, compute, or data prerequisites does this approach require?
+What sample sizes or replication levels are typical?
+What controls are essential vs. optional?
+
+## Known failure modes
+What does this methodology reliably fail to detect or account for? \
+What do the papers collectively reveal about its blind spots?
 
 Rules:
-- Describe the ABSTRACT pattern, not just a list of paper summaries
-- Use [[paper_slug]] for all citations
-- Keep it practical — a researcher reading this should understand when and how to apply the pattern
+- Be concrete and actionable — a researcher should know exactly what protocol to follow
+- Use [[paper_slug]] for all paper citations
+- Use [[concept_slug]] for cross-references to concept pages
+- Name actual tools, assays, datasets, or models where the papers mention them
+- Never describe the pattern as "problem → solution → validation" — describe the actual method
 """
 
 # ─── Writing style page synthesis (GPT-4.1) ───────────────────────────────────
 
 STYLE_SYNTHESIS_SYSTEM = """\
-You are writing a practical writing style guide for academic papers in a specific venue and topic area.
+You are writing a practical writing reference card for researchers who want to write papers \
+targeting a specific venue and topic area.
 
-You will receive structured writing convention data extracted from multiple papers in this venue+topic group.
+You will receive structured writing data extracted from papers in this venue+topic group, \
+including verbatim phrases, section orders, and hedging examples.
+
+This page is a REFERENCE CARD — concrete, imitable, immediately actionable.
 
 The page MUST have this structure:
 
@@ -153,24 +179,46 @@ confidence: {confidence}
 
 # {style_title}
 
-## Structural conventions
-- **Section order:** <typical order observed across papers>
-- **Results placement:** <before or after methods>
-- **Introduction strategy:** <how the intro is typically structured>
-- **Discussion arc:** <how discussion typically flows>
-- **Supplementary materials:** <how/whether extended data is used>
+## Paper structure
+- **Section order:** <exact typical order, e.g. "Abstract → Introduction → Results → Methods → Discussion">
+- **Results vs. Methods placement:** <which comes first and why>
+- **Introduction length:** <typical paragraph count and arc, e.g. "3-4 paragraphs: broad context → gap → contribution">
+- **Discussion arc:** <how the discussion flows, e.g. "restate findings → mechanisms → limitations → future work">
+- **Supplementary materials:** <what goes there and how it is referenced>
 
-## Prose and tone
-- **Voice:** <active/passive/mixed — cite specific patterns>
-- **Tense discipline:** <how tense is used for different content types>
-- **Sentence style:** <short declarative vs. explanatory; paragraph structure>
-- **Hedging:** <level and specific verbatim phrases observed>
-- **Transitions:** <verbatim transition phrases from the papers>
-- **Quantitative reporting:** <how numbers and statistics are presented>
+## Sentence-level writing conventions
+- **Voice:** <active / passive / mixed — name which sections use which>
+- **Tense discipline:** <e.g. "past tense for methods and results; present tense for claims and interpretation">
+- **Claim strength:** <how bold vs. hedged the main claims are — cite verbatim examples>
+- **Quantitative reporting:** <exact format used, e.g. "mean ± SD (n=3, p<0.05 by Student's t-test)">
+
+## Verbatim phrase bank
+Copy these directly when writing for this venue:
+
+**Opening a results section:**
+> "<verbatim example from a paper>"
+
+**Introducing a figure:**
+> "<verbatim example>"
+
+**Hedging / uncertainty:**
+> "<verbatim hedging phrase>"
+> "<second example if available>"
+
+**Transitions between sections:**
+> "<verbatim transition>"
+
+**Stating a limitation:**
+> "<verbatim limitation phrase>"
+
+## What distinguishes this venue's style
+2-4 observations about what makes writing in this venue distinctive compared to the default \
+academic style. Be specific — name the feature and give an example.
 
 Rules:
-- Include VERBATIM examples from the papers wherever relevant (in quotes)
-- Be concrete and imitable — a researcher should be able to directly apply this guide
-- Note variation across papers where it exists; don't force false uniformity
-- Use [[paper_slug]] when attributing specific examples to specific papers
+- Every item in the phrase bank must be VERBATIM text from one of the analyzed papers
+- Attribute specific phrases to papers with [[paper_slug]] in parentheses after the quote
+- If papers disagree on a convention, say so explicitly ("[[paper_slug_a]] uses X; [[paper_slug_b]] uses Y")
+- Skip any section where you have no concrete evidence — do not fabricate conventions
+- confidence: high means >=2 papers; low means 1 paper (note this limitation)
 """

@@ -34,10 +34,17 @@ async def cluster_patterns(
         return {}
 
     existing_text = "\n".join(f"- {slug}: {title}" for title, slug in existing_pattern_index)
-    papers_text = "\n".join(
-        f"- paper_id={p.get('paper_id', '?')} | title={p.get('title', '?')} | logic_pattern={p.get('logic_pattern', '')}"
-        for p in papers
-    )
+    paper_lines = []
+    for p in papers:
+        tags = ", ".join(p.get("methodological_tags") or []) or "(none)"
+        line = (
+            f"- paper_id={p.get('paper_id', '?')} | title={p.get('title', '?')} "
+            f"| logic_pattern={p.get('logic_pattern', '')} "
+            f"| key_experiment_summary={p.get('key_experiment_summary', '')} "
+            f"| methodological_tags=[{tags}]"
+        )
+        paper_lines.append(line)
+    papers_text = "\n".join(paper_lines)
     user_message = (
         f"Existing pattern pages:\n{existing_text or '(none)'}\n\n"
         f"Papers to assign:\n{papers_text}"

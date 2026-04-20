@@ -13,6 +13,7 @@ from ..models import PaperEntry, Registry
 from ..registry import save_registry
 from .concept_mapping import generate_concept_mapping
 from ..linking.pending_concepts import update_pending_from_mappings
+from ..linking.pending_styles import update_pending_styles
 from .l1_aggregator import aggregate_l1_profile, update_source_page_summary
 from .prompts.experiment import MODULE_NAME as EXPERIMENT_MODULE
 from .prompts.experiment import SYSTEM_PROMPT as EXPERIMENT_PROMPT
@@ -216,6 +217,7 @@ async def collect_batch(
 
     if collected_paper_ids:
         update_pending_from_mappings(staging_dir, collected_paper_ids)
+        update_pending_styles(staging_dir, collected_paper_ids)
 
     save_registry(registry, raw_dir)
     return result

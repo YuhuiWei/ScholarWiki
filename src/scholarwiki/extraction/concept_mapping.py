@@ -144,6 +144,7 @@ def generate_concept_mapping(
     roadmap = _load_json(staging_paper_dir / "roadmap.json")
     logic = _load_json(staging_paper_dir / "logic.json")
     writing = _load_json(staging_paper_dir / "writing.json")
+    experiment = _load_json(staging_paper_dir / "experiment.json")
 
     # Collect concept → {knowledge_items, roadmap_edges} mapping.
     # Only knowledge items drive concept page creation.
@@ -201,6 +202,16 @@ def generate_concept_mapping(
             }
         concept_contributions.append(contribution)
 
+    # Build key_experiment_summary from pipeline steps
+    pipeline_steps = experiment.get("experimental_pipeline", [])
+    summary_parts = []
+    for step in pipeline_steps[:5]:
+        action = step.get("action", "")
+        details = step.get("details", "")
+        if action:
+            summary_parts.append(f"{action}: {details}" if details else action)
+    key_experiment_summary = "; ".join(summary_parts)
+
     topic_area = writing.get("topic_area", "") or ""
     return {
         "paper_id": paper_id,
@@ -208,6 +219,7 @@ def generate_concept_mapping(
         "pattern_signals": {
             "logic_pattern": logic.get("logic_pattern", ""),
             "methodological_tags": methodological_tags,
+            "key_experiment_summary": key_experiment_summary,
         },
         "writing_signals": {
             "venue": writing.get("venue", "") or "",
