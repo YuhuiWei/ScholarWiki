@@ -18,30 +18,151 @@ from ..zotero import push_paper
 
 _FUZZY_THRESHOLD = 85
 _DOI_RE = re.compile(r"\b(10\.\d{4,}/\S+)", re.IGNORECASE)
+_YEAR_RE = re.compile(r"(?<!\d)(20[12]\d)(?!\d)")  # exact 4-digit year, not part of longer number
+_CREATION_YEAR_RE = re.compile(r"D:(\d{4})")  # PDF creation date "D:YYYYMMDD..."
+_AFFIL_KW = frozenset([
+    "university", "institute", "laboratory", "department", "school",
+    "college", "center", "centre", "hospital", "foundation", "academy",
+    "ministry", "national", "@", "correspondence", "contributed equally",
+    "co-corresponding", "equal contribution",
+])
+_VENUE_MAP = [
+    ("biorxiv", "bioRxiv"), ("arxiv", "arXiv"),
+    ("neurips", "NeurIPS"), ("iclr", "ICLR"), ("icml", "ICML"),
+    ("cvpr", "CVPR"), ("iccv", "ICCV"), ("aaai", "AAAI"),
+    ("nature", "Nature"), ("science", "Science"), ("cell ", "Cell"),
+]
+
+
+def _clean_author_name(raw: str) -> str:
+    """Strip superscript markers and symbols from a single author name."""
+    name = re.sub(r"[\d#†§*+∗‡¶]+", "", raw).strip(" ,")
+    return name if len(name) > 3 and re.match(r"[A-Z]", name) else ""
 
 
 def _extract_pdf_metadata(pdf_path: Path) -> dict:
-    """Return dict with title, doi from PDF metadata/first-page text."""
+    """Extract title, authors, year, doi, venue, abstract from PDF text."""
     try:
         doc = fitz.open(str(pdf_path))
-        meta = doc.metadata or {}
-        title = meta.get("title", "").strip()
-        # Scan first 2 pages for DOI
+        pages_text = [doc[i].get_text() for i in range(min(3, len(doc)))]
+        full_text = "\n".join(pages_text)
+        lines = [l.strip() for l in full_text.split("\n") if l.strip()]
+        doc_meta = doc.metadata or {}
+        doc.close()
+
+        # --- DOI (first 80 lines) ---
         doi = None
-        for i in range(min(2, len(doc))):
-            text = doc[i].get_text()
-            m = _DOI_RE.search(text)
+        for line in lines[:80]:
+            m = _DOI_RE.search(line)
             if m:
                 doi = m.group(1).rstrip(".,;)")
                 break
-        if not title:
-            # Fallback: first non-empty line of page 0
-            first_page = doc[0].get_text().strip()
-            title = first_page.split("\n")[0][:200]
-        doc.close()
-        return {"title": title, "doi": doi}
+
+        # --- Year: DOI > PDF creation date > first-page text (narrow scan) ---
+        year = None
+        if doi:
+            m = _YEAR_RE.search(doi)
+            if m:
+                year = int(m.group(1))
+        if not year:
+            creation = doc_meta.get("creationDate", "")  # e.g. "D:20250219015347Z"
+            m = _CREATION_YEAR_RE.search(creation)
+            if m:
+                year = int(m.group(1))
+        if not year:
+            # Only scan first 30 lines to avoid picking up citation years
+            for line in lines[:30]:
+                m = _YEAR_RE.search(line)
+                if m:
+                    year = int(m.group(1))
+                    break
+
+        # --- Blind review format (ICLR/NeurIPS anon): line numbers 000–059 ---
+        is_blind = sum(1 for l in lines[:40] if re.match(r"^\d{3}$", l)) > 8
+
+        # --- Title ---
+        title = doc_meta.get("title", "").strip()
+        if not title or is_blind:
+            content_lines = [l for l in lines if not re.match(r"^\d+$", l) and len(l) > 10]
+            # Join first 1-3 short lines that look like a title
+            title_parts: list[str] = []
+            for line in content_lines[:5]:
+                if len(" ".join(title_parts + [line])) > 300:
+                    break
+                title_parts.append(line)
+                if len(" ".join(title_parts)) > 40:
+                    break
+            title = " ".join(title_parts)[:250] if title_parts else pdf_path.stem
+
+        # --- Venue: PDF subject/keywords field first, then text scan ---
+        venue = None
+        for field in [doc_meta.get("subject", ""), doc_meta.get("keywords", "")]:
+            if not field:
+                continue
+            for kw, label in _VENUE_MAP:
+                if kw in field.lower():
+                    venue = label
+                    break
+            if venue:
+                break
+        if not venue:
+            text_lower = full_text[:3000].lower()
+            for kw, label in _VENUE_MAP:
+                if kw in text_lower:
+                    venue = label
+                    break
+
+        # --- Authors: PDF metadata first (most reliable), else text heuristic ---
+        authors: list[str] = []
+        pdf_author = doc_meta.get("author", "").strip()
+        # Use PDF author field if it's Latin characters (not CJK submitter metadata)
+        if pdf_author and all(ord(c) < 0x4E00 for c in pdf_author) and len(pdf_author) > 3:
+            for part in re.split(r"[;,]\s*| and ", pdf_author):
+                name = _clean_author_name(part)
+                # Skip "Team" entries and single-word non-names
+                if name and " " in name and "Team" not in name:
+                    authors.append(name)
+
+        if not authors and not is_blind:
+            abstract_pos = next(
+                (i for i, l in enumerate(lines) if re.match(r"^abstract\s*$", l, re.IGNORECASE)),
+                None,
+            )
+            search_end = min(abstract_pos, 40) if abstract_pos else 30
+            for line in lines[2:search_end]:
+                if any(kw in line.lower() for kw in _AFFIL_KW):
+                    continue
+                if re.match(r"^\d+$", line) or len(line) < 5:
+                    continue
+                words = line.split()
+                # Author lines: ≥2 capitalized words, contains comma or "and"
+                caps = sum(1 for w in words if w and w[0].isupper())
+                if caps >= 2 and ("," in line or " and " in line.lower()):
+                    for part in re.split(r",\s*| and ", line):
+                        name = _clean_author_name(part)
+                        if name:
+                            authors.append(name)
+                    if authors:
+                        break  # stop after first author line
+
+        # --- Abstract ---
+        abstract = None
+        for i, line in enumerate(lines):
+            if re.match(r"^abstract\s*$", line, re.IGNORECASE):
+                parts = []
+                for l in lines[i + 1: i + 25]:
+                    if re.match(r"^(introduction|keywords|1\s*\.|background)", l, re.IGNORECASE):
+                        break
+                    parts.append(l)
+                abstract = " ".join(parts)[:1200] if parts else None
+                break
+
+        return {
+            "title": title, "doi": doi, "authors": authors,
+            "year": year, "venue": venue, "abstract": abstract,
+        }
     except Exception:
-        return {"title": pdf_path.stem, "doi": None}
+        return {"title": pdf_path.stem, "doi": None, "authors": [], "year": None, "venue": None, "abstract": None}
 
 
 def _derive_paper_id(doi: str | None, title: str, year: int | None = None) -> str:
@@ -139,6 +260,10 @@ def ingest_manual_inbox(
                 paper_id=paper_id,
                 title=title,
                 doi=doi,
+                authors=meta.get("authors", []),
+                year=meta.get("year"),
+                venue=meta.get("venue"),
+                abstract=meta.get("abstract"),
                 source="manual_unmatched",
                 file_path=str(dest),
                 file_type="pdf",

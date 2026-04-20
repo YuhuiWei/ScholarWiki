@@ -6,7 +6,7 @@ paths:
   wiki: "./wiki"
 
 zotero:
-  library_id: "${ZOTERO_LIBRARY_ID}"
+  library_id: "20167090"
   library_type: "user"
   api_key: "${ZOTERO_API_KEY}"
 
