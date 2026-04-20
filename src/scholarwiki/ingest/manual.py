@@ -84,13 +84,12 @@ def _extract_pdf_metadata(pdf_path: Path) -> dict:
         title = doc_meta.get("title", "").strip()
         if not title or is_blind:
             content_lines = [l for l in lines if not re.match(r"^\d+$", l) and len(l) > 10]
-            # Join first 1-3 short lines that look like a title
+            # Take the first content line as the title; join a second line only if
+            # the first ends with a hyphen (indicating a wrapped title).
             title_parts: list[str] = []
-            for line in content_lines[:5]:
-                if len(" ".join(title_parts + [line])) > 300:
-                    break
+            for line in content_lines[:4]:
                 title_parts.append(line)
-                if len(" ".join(title_parts)) > 40:
+                if not line.rstrip().endswith("-"):
                     break
             title = " ".join(title_parts)[:250] if title_parts else pdf_path.stem
 
