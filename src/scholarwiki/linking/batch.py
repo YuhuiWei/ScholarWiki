@@ -358,13 +358,32 @@ async def submit_link_batches(
     }
 
     # Step 3: Cluster design patterns (synchronous GPT-5 call)
+    # Include ALL papers with a concept_mapping.json (not just the current batch)
+    # so patterns accumulate correctly across incremental linking runs.
     pattern_input = []
+    seen_pattern_ids: set[str] = set()
     for paper_id, mapping in paper_mappings.items():
         entry = registry.papers.get(paper_id)
         ps = mapping.get("pattern_signals", {})
         pattern_input.append({
             "paper_id": paper_id,
             "title": entry.title if entry else paper_id,
+            "logic_pattern": ps.get("logic_pattern", ""),
+            "key_experiment_summary": ps.get("key_experiment_summary", ""),
+            "methodological_tags": ps.get("methodological_tags", []),
+        })
+        seen_pattern_ids.add(paper_id)
+    # Add previously-linked papers that have concept_mapping.json
+    for entry in registry.papers.values():
+        if entry.paper_id in seen_pattern_ids:
+            continue
+        prior_mapping = _load_staging_json(staging_dir / entry.paper_id / "concept_mapping.json")
+        if not prior_mapping:
+            continue
+        ps = prior_mapping.get("pattern_signals", {})
+        pattern_input.append({
+            "paper_id": entry.paper_id,
+            "title": entry.title,
             "logic_pattern": ps.get("logic_pattern", ""),
             "key_experiment_summary": ps.get("key_experiment_summary", ""),
             "methodological_tags": ps.get("methodological_tags", []),
