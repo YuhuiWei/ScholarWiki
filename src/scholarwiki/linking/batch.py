@@ -170,7 +170,7 @@ def _build_concept_request(
                 {"role": "system", "content": CONCEPT_SYNTHESIS_SYSTEM},
                 {"role": "user", "content": user_content},
             ],
-            "max_completion_tokens": 4096,
+            "max_completion_tokens": 6000,
         },
     }
 
@@ -227,7 +227,7 @@ def _build_pattern_request(
                 {"role": "system", "content": PATTERN_SYNTHESIS_SYSTEM},
                 {"role": "user", "content": user_content},
             ],
-            "max_completion_tokens": 4096,
+            "max_completion_tokens": 6000,
         },
     }
 
@@ -280,7 +280,7 @@ def _build_style_request(
                 {"role": "system", "content": STYLE_SYNTHESIS_SYSTEM},
                 {"role": "user", "content": user_content},
             ],
-            "max_completion_tokens": 4096,
+            "max_completion_tokens": 6000,
         },
     }
 
@@ -593,13 +593,21 @@ async def collect_link_batches(
                     continue
 
                 try:
-                    markdown = item["response"]["body"]["choices"][0]["message"]["content"]
+                    choice = item["response"]["body"]["choices"][0]
+                    markdown = choice["message"]["content"] or ""
+                    finish_reason = choice.get("finish_reason", "")
                 except (KeyError, IndexError) as exc:
                     result.errors.append(f"{custom_id}: parse error — {exc}")
                     continue
 
                 # Skip noop placeholders
                 if custom_id.startswith("noop_"):
+                    continue
+
+                if not markdown.strip():
+                    result.errors.append(
+                        f"{custom_id}: empty response (finish_reason={finish_reason!r}) — skipped"
+                    )
                     continue
 
                 if custom_id.startswith("concept_"):

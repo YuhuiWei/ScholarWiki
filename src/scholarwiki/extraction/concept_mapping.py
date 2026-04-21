@@ -278,8 +278,9 @@ def generate_concept_mapping(
     key_experiment_summary = "; ".join(summary_parts)
 
     topic_area = writing.get("topic_area", "") or ""
-    # Split comma-separated topic_area into individual tags for Jaccard clustering
-    topic_tags = [t.strip() for t in topic_area.split(",") if t.strip()] if topic_area else []
+    # Split on comma or semicolon — GPT output uses both as separators
+    import re as _re
+    topic_tags = [t.strip() for t in _re.split(r"[,;]", topic_area) if t.strip()] if topic_area else []
 
     return {
         "paper_id": paper_id,
