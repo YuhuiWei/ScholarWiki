@@ -130,6 +130,20 @@ What does the research collectively show? What is established with confidence?
 The most important results. Cite papers inline with [[paper_slug]].
 Include quantitative results where available.
 
+## Mathematical formulations
+Only include this section if any of the findings have evidence_type="mathematical".
+For each such finding, render its formula in a $$...$$ block (Obsidian MathJax):
+
+$$
+<latex_formula_here>
+$$
+
+**Variables:** symbol — meaning (list from the formulation.variables dict)
+**What it computes:** plain_english description
+**Paper:** [[paper_slug]]
+
+If no mathematical findings exist for this concept, omit this section entirely.
+
 ## Contradictions
 Where do papers disagree? Present both sides with citations.
 (Omit section if no contradictions exist.)
@@ -145,6 +159,7 @@ Rules:
 - Use [[concept_slug]] for cross-references to other concept pages
 - The page must contain knowledge that no single paper states — synthesis is the value
 - Write in clear, precise scientific prose (not bullet points in Key findings)
+- LaTeX in $$...$$ blocks renders natively in Obsidian — always use $$...$$ not $...$
 - If the existing page contains validated synthesis, incorporate and extend it rather than ignoring it
 """ + _CONNECTIONS_BLOCK
 
@@ -202,12 +217,26 @@ What controls are essential vs. optional?
 What does this methodology reliably fail to detect or account for? \
 What do the papers collectively reveal about its blind spots?
 
+## Key formulas
+Only include this section when pipeline steps have mathematical_detail.
+For each such step, render its formula in a $$...$$ block:
+
+$$
+<latex_formula_here>
+$$
+
+**What it computes:** plain_english description
+**Used in:** [[paper_slug]] (step N)
+
+Omit this section entirely if no pipeline steps define a formula.
+
 Rules:
 - Be concrete and actionable — a researcher should know exactly what protocol to follow
 - Use [[paper_slug]] for all paper citations
 - Use [[concept_slug]] for cross-references to concept pages
 - Name actual tools, assays, datasets, or models where the papers mention them
 - Never describe the pattern as "problem → solution → validation" — describe the actual method
+- LaTeX in $$...$$ blocks renders natively in Obsidian — always use $$...$$ not $...$
 """ + _CONNECTIONS_BLOCK
 
 # ─── Writing style page synthesis (GPT-4.1) ───────────────────────────────────

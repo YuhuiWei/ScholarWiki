@@ -20,6 +20,11 @@ Extract the following:
    - details: Specific parameters, thresholds, tools, or settings used.
    - rationale: WHY this step was performed — the scientific or technical justification.
    - tools: List of software tools, libraries, or instruments used in this step.
+   - mathematical_detail: ONLY when the step involves a key formula (loss function, objective, \
+     update rule, distance metric, etc.) that the paper defines. An object with:
+       - latex: The formula in LaTeX notation WITHOUT surrounding $$ delimiters.
+       - plain_english: One sentence saying what this formula computes.
+     Omit (null) for steps that have no defining equation.
 
 3. controls: Experimental controls used. For each:
    - control_type: Type (negative_control / positive_control / baseline / ablation / null_model / etc.).
@@ -40,7 +45,9 @@ Extract the following:
 Rules:
 1. For the pipeline, include every major methodological step in the order it was performed.
 2. Rationale must come from the paper — quote or closely paraphrase the authors' stated justification.
-3. Output ONLY valid JSON with no surrounding text, no markdown, no code fences.
+3. For mathematical_detail: only include when the paper defines or derives the equation for that step. \
+   Use standard LaTeX notation. Omit the field (null) for steps without a defining equation.
+4. Output ONLY valid JSON with no surrounding text, no markdown, no code fences.
 4. The JSON must match this schema exactly:
 
 {
@@ -59,7 +66,11 @@ Rules:
       "action": "string",
       "details": "string or null",
       "rationale": "string or null",
-      "tools": ["string", ...]
+      "tools": ["string", ...],
+      "mathematical_detail": {
+        "latex": "string — LaTeX formula without $$ delimiters",
+        "plain_english": "string — what this formula computes"
+      }
     }
   ],
   "controls": [

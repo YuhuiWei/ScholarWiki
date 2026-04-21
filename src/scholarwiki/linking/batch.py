@@ -153,6 +153,19 @@ def _build_concept_request(
             if item.get("quantitative_result"):
                 findings_text += f" [{item['quantitative_result']}]"
             findings_text += "\n"
+            # Include formulation for mathematical evidence
+            if item.get("evidence_type") == "mathematical" and item.get("formulation"):
+                f = item["formulation"]
+                findings_text += f"    evidence_type: mathematical\n"
+                if f.get("latex"):
+                    findings_text += f"    formulation.latex: {f['latex']}\n"
+                if f.get("plain_english"):
+                    findings_text += f"    formulation.plain_english: {f['plain_english']}\n"
+                if f.get("variables"):
+                    vars_str = "; ".join(f"{k}: {v}" for k, v in f["variables"].items())
+                    findings_text += f"    formulation.variables: {vars_str}\n"
+                if f.get("compared_to"):
+                    findings_text += f"    formulation.compared_to: {f['compared_to']}\n"
 
     edges_text = ""
     for c in contributions:
@@ -206,11 +219,16 @@ def _build_pattern_request(
         mapping = _load_staging_json(staging_dir / pid / "concept_mapping.json")
         ps = mapping.get("pattern_signals", {})
         pipeline_steps = experiment.get("experimental_pipeline", [])
-        step_summary = "; ".join(
-            f"{s.get('action', '')}: {s.get('details', '')}" if s.get("details") else s.get("action", "")
-            for s in pipeline_steps[:5]
-            if s.get("action")
-        )
+        step_parts = []
+        for s in pipeline_steps[:5]:
+            if not s.get("action"):
+                continue
+            part = f"{s.get('action', '')}: {s.get('details', '')}" if s.get("details") else s.get("action", "")
+            if s.get("mathematical_detail"):
+                md = s["mathematical_detail"]
+                part += f" [formula: {md.get('latex', '')}]"
+            step_parts.append(part)
+        step_summary = "; ".join(step_parts)
         controls = ", ".join(c.get("control_type", "") for c in experiment.get("controls", []) if c.get("control_type"))
         papers_text += (
             f"\n[[{paper_slug}]]\n"

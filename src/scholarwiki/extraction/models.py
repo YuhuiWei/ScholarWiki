@@ -15,9 +15,10 @@ class _Base(BaseModel):
 class KnowledgeItem(_Base):
     id: Optional[str] = None
     claim: str
-    evidence_type: Optional[str] = None   # experimental | computational | theoretical | review
+    evidence_type: Optional[str] = None   # experimental | computational | theoretical | mathematical | review
     confidence: Optional[str] = None      # high | medium | low
     supporting_data: Optional[str] = None
+    formulation: Optional[dict] = None    # {latex, variables, plain_english, compared_to} — mathematical only
     domain_tags: list[str] = Field(default_factory=list)
     related_concepts: list[str] = Field(default_factory=list)
     quantitative_result: Optional[str] = None
@@ -65,6 +66,7 @@ class PipelineStep(_Base):
     details: Optional[str] = None
     rationale: Optional[str] = None
     tools: list[str] = Field(default_factory=list)
+    mathematical_detail: Optional[dict] = None  # {latex, plain_english} — for formula-defining steps
 
 
 class Control(_Base):
