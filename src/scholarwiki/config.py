@@ -36,6 +36,7 @@ class ExtractionConfig(BaseModel):
     model: str = "gpt-4.1"
     max_papers_per_batch: int = 50
     max_tokens_per_request: int = 4096
+    max_cost_usd: float = 5.0        # abort extraction if estimated cost exceeds this
 
 
 class LinkingConfig(BaseModel):
@@ -43,6 +44,7 @@ class LinkingConfig(BaseModel):
     style_model: str = "gpt-4.1"     # GPT-4.1 for writing style synthesis
     min_papers_for_concept: int = 2  # concepts seen in fewer papers stay pending
     min_papers_for_style: int = 2    # style groups with fewer papers stay pending (1 = every paper)
+    max_cost_usd: float = 3.0        # abort linking if estimated cost exceeds this
 
 
 class SyncConfig(BaseModel):

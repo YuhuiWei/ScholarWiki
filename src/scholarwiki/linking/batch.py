@@ -8,6 +8,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
 from ..config import Config
+from ..cost_guard import check_linking_cap, CostCapExceeded
 from ..models import PaperEntry, Registry
 from ..registry import save_registry
 from .backfill import backfill_source_page
@@ -61,6 +62,38 @@ def _paper_slug(entry: PaperEntry) -> str:
     return entry.paper_id
 
 
+def _build_wiki_index_text(wiki_dir: Path, registry: Registry) -> str:
+    """Build a plain-text wiki index for the connections prompt.
+
+    Format:
+        [concept] slug — "Title"
+        [pattern] slug — "Title"
+        [writing] slug — "Title"
+        [source]  slug — "Title"
+    """
+    import re as _re
+    lines: list[str] = []
+
+    def _page_title(path: Path) -> str:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        m = _re.search(r'^title:\s*["\']?(.+?)["\']?\s*$', text, _re.MULTILINE)
+        return m.group(1).strip() if m else path.stem.replace("_", " ")
+
+    for page_type, subdir in [("concept", "concepts"), ("pattern", "patterns"), ("writing", "writing")]:
+        d = wiki_dir / subdir
+        if d.exists():
+            for md in sorted(d.glob("*.md")):
+                title = _page_title(md)
+                lines.append(f"[{page_type}] {md.stem} — \"{title}\"")
+
+    for entry in registry.papers.values():
+        if entry.wiki_source_page:
+            slug = Path(entry.wiki_source_page).stem
+            lines.append(f"[source]  {slug} — \"{entry.title}\"")
+
+    return "\n".join(lines)
+
+
 def _parse_edge_index(rid: str) -> int | None:
     """Parse 'r{int}' edge reference; return None on malformed input."""
     if not rid.startswith("r") or len(rid) < 2:
@@ -98,6 +131,7 @@ def _build_concept_request(
     existing_page: str,
     today: str,
     model: str,
+    wiki_index_text: str = "",
 ) -> dict:
     """Build a GPT-5 batch request for concept page synthesis."""
     findings_text = ""
@@ -123,7 +157,8 @@ def _build_concept_request(
         f"EXISTING PAGE (replace entirely — use as context):\n{existing_page or '(new concept page)'}\n\n"
         f"FINDINGS:\n{findings_text or '(none)'}\n\n"
         f"RESEARCH RELATIONSHIPS:\n{edges_text or '(none)'}\n\n"
-        f"today: {today}"
+        f"today: {today}\n\n"
+        f"WIKI INDEX (pages you may connect to):\n{wiki_index_text or '(none yet)'}"
     )
     return {
         "custom_id": f"concept_{slug}",
@@ -149,6 +184,7 @@ def _build_pattern_request(
     existing_page: str,
     today: str,
     model: str,
+    wiki_index_text: str = "",
 ) -> dict:
     papers_text = ""
     for pid in paper_ids:
@@ -178,7 +214,8 @@ def _build_pattern_request(
         f"Pattern title: {title}\n\n"
         f"EXISTING PAGE:\n{existing_page or '(new pattern page)'}\n\n"
         f"PAPERS USING THIS PATTERN:\n{papers_text}\n\n"
-        f"today: {today}"
+        f"today: {today}\n\n"
+        f"WIKI INDEX (pages you may connect to):\n{wiki_index_text or '(none yet)'}"
     )
     return {
         "custom_id": f"pattern_{slug}",
@@ -204,6 +241,7 @@ def _build_style_request(
     existing_page: str,
     today: str,
     model: str,
+    wiki_index_text: str = "",
 ) -> dict:
     papers_text = ""
     for pid in paper_ids:
@@ -229,7 +267,8 @@ def _build_style_request(
         f"Confidence: {confidence}\n\n"
         f"EXISTING PAGE:\n{existing_page or '(new style page)'}\n\n"
         f"PAPERS IN THIS GROUP:\n{papers_text}\n\n"
-        f"today: {today}"
+        f"today: {today}\n\n"
+        f"WIKI INDEX (pages you may connect to):\n{wiki_index_text or '(none yet)'}"
     )
     return {
         "custom_id": f"style_{slug}",
@@ -339,6 +378,17 @@ async def submit_link_batches(
         staging_dir, min_papers=cfg.linking.min_papers_for_style
     )
 
+    # Step 4b: Pre-flight cost check
+    check_linking_cap(
+        n_concepts=len(concept_groups),
+        n_patterns=len(pattern_clusters),
+        n_styles=len(style_clusters),
+        cap_usd=cfg.linking.max_cost_usd,
+    )
+
+    # Step 4c: Build wiki index for connection generation
+    wiki_index_text = _build_wiki_index_text(wiki_dir, registry)
+
     # Step 5: Build GPT-5 batch requests (concepts + patterns)
     gpt5_requests: list[dict] = []
 
@@ -349,7 +399,7 @@ async def submit_link_batches(
             existing_page = page_path.read_text(encoding="utf-8")
         gpt5_requests.append(_build_concept_request(
             slug, group["concept_name"], group["contributions"],
-            existing_page, today, synthesis_model,
+            existing_page, today, synthesis_model, wiki_index_text,
         ))
 
     for slug, cluster in pattern_clusters.items():
@@ -359,7 +409,7 @@ async def submit_link_batches(
             existing_page = page_path.read_text(encoding="utf-8")
         gpt5_requests.append(_build_pattern_request(
             slug, cluster["title"], cluster["paper_ids"],
-            staging_dir, registry, existing_page, today, synthesis_model,
+            staging_dir, registry, existing_page, today, synthesis_model, wiki_index_text,
         ))
 
     # Step 6: Build GPT-4.1 batch requests (writing styles)
@@ -372,7 +422,7 @@ async def submit_link_batches(
             existing_page = page_path.read_text(encoding="utf-8")
         gpt41_requests.append(_build_style_request(
             slug, cluster["title"], cluster["paper_ids"],
-            staging_dir, registry, existing_page, today, style_model,
+            staging_dir, registry, existing_page, today, style_model, wiki_index_text,
         ))
 
     # Add noop placeholders if either list is empty (batch API requires >=1 request)

@@ -47,6 +47,41 @@ Rules:
 - Only include assignments with >=2 papers; single-paper groups go to unassigned
 """
 
+# ─── Connection block (shared across all synthesis prompts) ───────────────────
+
+_CONNECTIONS_BLOCK = """\
+
+CONNECTIONS
+
+In addition to the page body, you MUST include a `connections` list in the YAML frontmatter. \
+Each entry links THIS page to another page that already exists in the WIKI INDEX provided in \
+the user message.
+
+connections:
+  - target: "[[slug_of_other_page]]"
+    edge_type: "<see types below>"
+    description: "One sentence explaining the relationship."
+
+Edge types — choose the most specific that applies:
+  subtopic_of       — this concept is a specific instance of a broader concept
+  enables           — understanding or mastering this is a prerequisite for the target
+  is_application_of — this applies a general principle to a more specific context
+  contributes_to    — findings or methods here directly inform understanding of the target
+  contradicts       — evidence here conflicts with claims on the target page
+  is_pattern_for    — (patterns only) this experimental design is the standard approach for that concept
+  is_style_for      — (writing pages only) this style guide covers papers in that concept area
+  related_to        — meaningful relationship that does not fit the types above (use sparingly)
+
+Rules:
+  - Generate 2–5 connections per page.
+  - ONLY connect to pages that appear in the WIKI INDEX — do not invent slugs.
+  - Prefer specific edge types over `related_to`.
+  - A connection must represent a meaningful epistemic relationship —
+    not merely that both topics share a broad domain.
+  - Cross-type connections are encouraged: concept pages may link to pattern or \
+writing pages, and vice versa.
+"""
+
 # ─── Concept page synthesis (GPT-5) ───────────────────────────────────────────
 
 CONCEPT_SYNTHESIS_SYSTEM = """\
@@ -57,6 +92,7 @@ You will receive:
 2. The existing page content (if any) — use as context, not as content to preserve
 3. All findings mapped to this concept from papers in the knowledge base
 4. Research relationships involving this concept
+5. A WIKI INDEX of pages you may link to
 
 Write a SYNTHESIZED NARRATIVE wiki page — like a mini-review by an expert who has read all the papers.
 Do NOT list findings per paper. Instead, synthesize across papers.
@@ -68,6 +104,10 @@ title: "{concept_title}"
 type: concept
 domain_tags: [<2-4 relevant scientific domain tags>]
 source_papers: [<[[paper_slug]] for each contributing paper>]
+connections:
+  - target: "[[slug]]"
+    edge_type: "subtopic_of"
+    description: "One sentence."
 last_updated: "{today}"
 ---
 
@@ -96,7 +136,7 @@ Rules:
 - The page must contain knowledge that no single paper states — synthesis is the value
 - Write in clear, precise scientific prose (not bullet points in Key findings)
 - If the existing page contains validated synthesis, incorporate and extend it rather than ignoring it
-"""
+""" + _CONNECTIONS_BLOCK
 
 # ─── Design pattern page synthesis (GPT-5) ────────────────────────────────────
 
@@ -110,6 +150,7 @@ You will receive:
 1. The pattern slug and title
 2. The existing page content (if any)
 3. Papers using this pattern: their experimental pipeline steps, controls, and logic pattern
+4. A WIKI INDEX of pages you may link to
 
 The page MUST have this structure:
 
@@ -119,6 +160,10 @@ type: pattern
 confidence: high
 method_tags: [<2-4 concrete method tags, e.g. perturbation, transcriptomics, ablation>]
 papers_using: [<[[paper_slug]] for each paper>]
+connections:
+  - target: "[[slug]]"
+    edge_type: "is_pattern_for"
+    description: "One sentence."
 last_updated: "{today}"
 ---
 
@@ -152,7 +197,7 @@ Rules:
 - Use [[concept_slug]] for cross-references to concept pages
 - Name actual tools, assays, datasets, or models where the papers mention them
 - Never describe the pattern as "problem → solution → validation" — describe the actual method
-"""
+""" + _CONNECTIONS_BLOCK
 
 # ─── Writing style page synthesis (GPT-4.1) ───────────────────────────────────
 
@@ -160,8 +205,10 @@ STYLE_SYNTHESIS_SYSTEM = """\
 You are writing a practical writing reference card for researchers who want to write papers \
 targeting a specific venue and topic area.
 
-You will receive structured writing data extracted from papers in this venue+topic group, \
+You will receive:
+1. Structured writing data extracted from papers in this venue+topic group, \
 including verbatim phrases, section orders, and hedging examples.
+2. A WIKI INDEX of pages you may link to.
 
 This page is a REFERENCE CARD — concrete, imitable, immediately actionable.
 
@@ -173,6 +220,10 @@ type: writing_style
 venue: "{venue}"
 topic_tags: [<2-4 topic tags>]
 papers_analyzed: [<[[paper_slug]] for each paper>]
+connections:
+  - target: "[[slug]]"
+    edge_type: "is_style_for"
+    description: "One sentence."
 last_updated: "{today}"
 confidence: {confidence}
 ---
@@ -221,4 +272,4 @@ Rules:
 - If papers disagree on a convention, say so explicitly ("[[paper_slug_a]] uses X; [[paper_slug_b]] uses Y")
 - Skip any section where you have no concrete evidence — do not fabricate conventions
 - confidence: high means >=2 papers; low means 1 paper (note this limitation)
-"""
+""" + _CONNECTIONS_BLOCK

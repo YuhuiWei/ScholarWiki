@@ -6,41 +6,45 @@ last_updated: "{{ last_updated }}"
 
 # Suggested papers
 
-Papers referenced by your knowledge base but not yet downloaded.
+Papers referenced by your knowledge base but not yet ingested.
+Ranked by structural importance — how many hub concept/pattern pages reference them.
+Showing {{ shown }} of {{ total_candidates }} candidates.
 
-{% if high_priority %}
-## High priority (referenced by 3+ papers)
+{% if critical %}
+## Critical — would strengthen hub concepts
 
-{% for paper in high_priority %}
+{% for paper in critical %}
 ### {{ paper.title }}
-- **Likely DOI:** {{ paper.doi or "unknown" }}
-- **Referenced by:** {% for ref in paper.referenced_by %}[[{{ ref }}]]{% if not loop.last %}, {% endif %}{% endfor %}
+- **DOI:** {{ paper.doi or "unknown" }}
+- **Referenced by:** {% for ref in paper.cited_by_pages %}[[{{ ref }}]]{% if not loop.last %}, {% endif %}{% endfor %}
 
 - **Relationship types:** {{ paper.relationship_types | join(", ") }}
+- **Structural score:** {{ "%.1f"|format(paper.score) }}
 - **Quick add:** `nexus fetch {% if paper.doi %}--doi "{{ paper.doi }}"{% else %}"{{ paper.search_query }}"{% endif %} --download`
 
 {% endfor %}
 {% endif %}
-{% if medium_priority %}
-## Medium priority (referenced by 2 papers)
+{% if high_priority %}
+## High priority
 
-{% for paper in medium_priority %}
+{% for paper in high_priority %}
 ### {{ paper.title }}
-- **Likely DOI:** {{ paper.doi or "unknown" }}
-- **Referenced by:** {% for ref in paper.referenced_by %}[[{{ ref }}]]{% if not loop.last %}, {% endif %}{% endfor %}
+- **DOI:** {{ paper.doi or "unknown" }}
+- **Referenced by:** {% for ref in paper.cited_by_pages %}[[{{ ref }}]]{% if not loop.last %}, {% endif %}{% endfor %}
 
 - **Relationship types:** {{ paper.relationship_types | join(", ") }}
+- **Structural score:** {{ "%.1f"|format(paper.score) }}
 - **Quick add:** `nexus fetch {% if paper.doi %}--doi "{{ paper.doi }}"{% else %}"{{ paper.search_query }}"{% endif %} --download`
 
 {% endfor %}
 {% endif %}
 {% if low_priority %}
-## Low priority (referenced by 1 paper)
+## Lower priority
 
 {% for paper in low_priority %}
 ### {{ paper.title }}
-- **Likely DOI:** {{ paper.doi or "unknown" }}
-- **Referenced by:** {% for ref in paper.referenced_by %}[[{{ ref }}]]{% if not loop.last %}, {% endif %}{% endfor %}
+- **DOI:** {{ paper.doi or "unknown" }}
+- **Referenced by:** {% for ref in paper.cited_by_pages %}[[{{ ref }}]]{% if not loop.last %}, {% endif %}{% endfor %}
 
 - **Relationship types:** {{ paper.relationship_types | join(", ") }}
 - **Quick add:** `nexus fetch {% if paper.doi %}--doi "{{ paper.doi }}"{% else %}"{{ paper.search_query }}"{% endif %} --download`
