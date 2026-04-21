@@ -1,7 +1,8 @@
 from __future__ import annotations
 import pytest
 from pathlib import Path
-from scholarwiki.mcp.tools import search_wiki, read_page, read_style_page
+from scholarwiki.mcp.tools import search_wiki, read_page, read_style_page, read_source_pdf_section
+from scholarwiki.models import PaperEntry, Registry
 
 
 def _setup_wiki(tmp_path: Path) -> Path:
@@ -171,3 +172,109 @@ def test_read_style_topic_boosts_score(tmp_path):
     result = read_style_page(wiki, "nature", "genomics")
     assert result is not None
     assert "Nature Genomics" in result
+
+
+# ---------- read_source_pdf_section ----------
+
+def _make_registry_with_source_page(paper_id: str, title: str, source_page: str) -> Registry:
+    entry = PaperEntry(
+        paper_id=paper_id,
+        title=title,
+        source="manual",
+        doi=f"10.000/{paper_id}",
+        wiki_source_page=source_page,
+    )
+    return Registry(papers={paper_id: entry})
+
+
+def test_pdf_no_pdf_found(tmp_path):
+    raw_dir = tmp_path / "raw"
+    (raw_dir / "papers").mkdir(parents=True)
+    reg = _make_registry_with_source_page("abc123", "Test Paper", "sources/abc123.md")
+    result = read_source_pdf_section("abc123", "abstract", raw_dir, reg)
+    assert result.startswith("Error: No PDF found")
+
+
+def test_pdf_unknown_slug(tmp_path):
+    raw_dir = tmp_path / "raw"
+    (raw_dir / "papers").mkdir(parents=True)
+    reg = Registry(papers={})
+    result = read_source_pdf_section("nonexistent", "abstract", raw_dir, reg)
+    assert result.startswith("Error: No PDF found")
+
+
+def test_pdf_unknown_section(tmp_path):
+    """Unknown section name returns descriptive error without crashing."""
+    import fitz
+    raw_dir = tmp_path / "raw"
+    papers_dir = raw_dir / "papers"
+    papers_dir.mkdir(parents=True)
+
+    # Create a minimal valid PDF
+    pdf_path = papers_dir / "abc123.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "Abstract\nThis is the abstract content.")
+    doc.save(str(pdf_path))
+    doc.close()
+
+    reg = _make_registry_with_source_page("abc123", "Test Paper", "sources/abc123.md")
+    result = read_source_pdf_section("abc123", "not_a_section", raw_dir, reg)
+    assert result.startswith("Error: Unknown section")
+
+
+def test_pdf_full_section_returns_text(tmp_path):
+    """Section='full' returns all text up to max_chars."""
+    import fitz
+    raw_dir = tmp_path / "raw"
+    papers_dir = raw_dir / "papers"
+    papers_dir.mkdir(parents=True)
+
+    pdf_path = papers_dir / "abc123.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "Abstract\nThis paper describes methods for sequencing.")
+    doc.save(str(pdf_path))
+    doc.close()
+
+    reg = _make_registry_with_source_page("abc123", "Test Paper", "sources/abc123.md")
+    result = read_source_pdf_section("abc123", "full", raw_dir, reg, max_chars=500)
+    assert "Abstract" in result or "sequencing" in result
+    assert len(result) <= 500
+
+
+def test_pdf_page_number_section(tmp_path):
+    """Section='1' returns text of first page."""
+    import fitz
+    raw_dir = tmp_path / "raw"
+    papers_dir = raw_dir / "papers"
+    papers_dir.mkdir(parents=True)
+
+    pdf_path = papers_dir / "abc123.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "Page one content here.")
+    doc.save(str(pdf_path))
+    doc.close()
+
+    reg = _make_registry_with_source_page("abc123", "Test Paper", "sources/abc123.md")
+    result = read_source_pdf_section("abc123", "1", raw_dir, reg)
+    assert "Page one content" in result
+
+
+def test_pdf_out_of_range_page(tmp_path):
+    """Page number beyond document length returns error."""
+    import fitz
+    raw_dir = tmp_path / "raw"
+    papers_dir = raw_dir / "papers"
+    papers_dir.mkdir(parents=True)
+
+    pdf_path = papers_dir / "abc123.pdf"
+    doc = fitz.open()
+    doc.new_page()
+    doc.save(str(pdf_path))
+    doc.close()
+
+    reg = _make_registry_with_source_page("abc123", "Test Paper", "sources/abc123.md")
+    result = read_source_pdf_section("abc123", "99", raw_dir, reg)
+    assert result.startswith("Error: Page")

@@ -65,14 +65,13 @@ def _paper_slug(entry: PaperEntry) -> str:
 def _build_wiki_index_text(wiki_dir: Path, registry: Registry) -> str:
     """Build a plain-text wiki index for the connections prompt.
 
-    Format:
-        [concept] slug — "Title"
-        [pattern] slug — "Title"
-        [writing] slug — "Title"
-        [source]  slug — "Title"
+    CONNECTABLE pages (concept/pattern/writing) are valid connection targets.
+    SOURCE paper pages are listed separately — never valid connection targets,
+    but their slugs are used as via_paper citation references.
     """
     import re as _re
-    lines: list[str] = []
+    connectable: list[str] = []
+    sources: list[str] = []
 
     def _page_title(path: Path) -> str:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -84,13 +83,25 @@ def _build_wiki_index_text(wiki_dir: Path, registry: Registry) -> str:
         if d.exists():
             for md in sorted(d.glob("*.md")):
                 title = _page_title(md)
-                lines.append(f"[{page_type}] {md.stem} — \"{title}\"")
+                connectable.append(f"[{page_type}] {md.stem} — \"{title}\"")
 
     for entry in registry.papers.values():
         if entry.wiki_source_page:
             slug = Path(entry.wiki_source_page).stem
-            lines.append(f"[source]  {slug} — \"{entry.title}\"")
+            sources.append(f"[source]  {slug} — \"{entry.title}\"")
 
+    lines: list[str] = []
+    if connectable:
+        lines.append("CONNECTABLE PAGES (use these as connection targets):")
+        lines.extend(connectable)
+    if sources:
+        if lines:
+            lines.append("")
+        lines.append(
+            "SOURCE PAPER PAGES (use slugs as via_paper only — "
+            "do NOT use these as connection targets):"
+        )
+        lines.extend(sources)
     return "\n".join(lines)
 
 

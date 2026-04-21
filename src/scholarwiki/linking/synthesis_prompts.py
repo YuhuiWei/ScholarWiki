@@ -54,13 +54,21 @@ _CONNECTIONS_BLOCK = """\
 CONNECTIONS
 
 In addition to the page body, you MUST include a `connections` list in the YAML frontmatter. \
-Each entry links THIS page to another page that already exists in the WIKI INDEX provided in \
-the user message.
+Each entry links THIS page to another page listed under "CONNECTABLE PAGES" in the WIKI INDEX.
 
 connections:
-  - target: "[[slug_of_other_page]]"
+  - target: "[[slug_of_concept_or_pattern_or_writing_page]]"
     edge_type: "<see types below>"
+    via_paper: "[[paper_slug]]"
     description: "One sentence explaining the relationship."
+
+Fields:
+  target      — slug of a CONNECTABLE page (concept, pattern, or writing style only).
+                NEVER use a source paper slug as a target.
+  edge_type   — see edge types below.
+  via_paper   — REQUIRED. The [[paper_slug]] whose findings ground this connection.
+                Must be one of the source paper slugs listed in the WIKI INDEX.
+  description — one sentence explaining the epistemic relationship.
 
 Edge types — choose the most specific that applies:
   subtopic_of       — this concept is a specific instance of a broader concept
@@ -74,7 +82,8 @@ Edge types — choose the most specific that applies:
 
 Rules:
   - Generate 2–5 connections per page.
-  - ONLY connect to pages that appear in the WIKI INDEX — do not invent slugs.
+  - ONLY use slugs from "CONNECTABLE PAGES" as targets — never source paper slugs.
+  - Every connection MUST include via_paper citing the source paper that justifies this link.
   - Prefer specific edge types over `related_to`.
   - A connection must represent a meaningful epistemic relationship —
     not merely that both topics share a broad domain.
@@ -107,6 +116,7 @@ source_papers: [<[[paper_slug]] for each contributing paper>]
 connections:
   - target: "[[slug]]"
     edge_type: "subtopic_of"
+    via_paper: "[[paper_slug]]"
     description: "One sentence."
 last_updated: "{today}"
 ---
@@ -163,6 +173,7 @@ papers_using: [<[[paper_slug]] for each paper>]
 connections:
   - target: "[[slug]]"
     edge_type: "is_pattern_for"
+    via_paper: "[[paper_slug]]"
     description: "One sentence."
 last_updated: "{today}"
 ---
@@ -223,6 +234,7 @@ papers_analyzed: [<[[paper_slug]] for each paper>]
 connections:
   - target: "[[slug]]"
     edge_type: "is_style_for"
+    via_paper: "[[paper_slug]]"
     description: "One sentence."
 last_updated: "{today}"
 confidence: {confidence}

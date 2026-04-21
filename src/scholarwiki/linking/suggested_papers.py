@@ -50,12 +50,14 @@ def _parse_connections(md_text: str) -> list[dict]:
     # Parse each item
     for item_m in re.finditer(r"-\s+target:\s*[\"']?\[\[([^\]]+)\]\][\"']?", block):
         slug = item_m.group(1).strip()
-        # Find edge_type on the next few lines after this item start
+        # Find edge_type and via_paper on the next few lines after this item start
         pos = item_m.end()
-        snippet = block[pos:pos + 200]
+        snippet = block[pos:pos + 300]
         et_m = re.search(r"edge_type:\s*[\"']?(\w+)[\"']?", snippet)
         edge_type = et_m.group(1) if et_m else "related_to"
-        connections.append({"target_slug": slug, "edge_type": edge_type})
+        vp_m = re.search(r"via_paper:\s*[\"']?\[\[([^\]]+)\]\][\"']?", snippet)
+        via_paper = vp_m.group(1).strip() if vp_m else None
+        connections.append({"target_slug": slug, "edge_type": edge_type, "via_paper": via_paper})
 
     return connections
 
@@ -181,8 +183,19 @@ def rebuild_suggested_papers(
     adj = _build_concept_graph(wiki_dir)
     hub_scores = _compute_hub_scores(adj)
 
-    # Map source-page slugs to their hub score (concepts/patterns are primary hubs)
-    # Source pages also appear in the graph if concepts link to them
+    # Build bridge index: source paper slug → number of distinct concept/pattern/writing
+    # connections that cite it via via_paper.  This measures how much a source paper's
+    # findings are woven into the knowledge graph.
+    bridge_index: dict[str, int] = defaultdict(int)
+    for subdir in ("concepts", "patterns", "writing"):
+        d = wiki_dir / subdir
+        if not d.exists():
+            continue
+        for md in d.glob("*.md"):
+            for conn in _parse_connections(md.read_text(encoding="utf-8", errors="replace")):
+                if conn.get("via_paper"):
+                    bridge_index[conn["via_paper"]] += 1
+
     def _page_hub(slug: str) -> float:
         return hub_scores.get(slug, 0.0)
 
@@ -192,10 +205,14 @@ def rebuild_suggested_papers(
     scored: list[dict] = []
     for ref in refs.values():
         citing_pages = ref["cited_by_pages"]
-        # Score = sum of hub scores of citing pages + breadth bonus
+        # hub_score: sum of hub centrality scores of citing source pages
         structural_score = sum(_page_hub(pg) for pg in citing_pages)
-        breadth_bonus = len(citing_pages) * 0.5
-        total_score = structural_score + breadth_bonus
+        # breadth: each distinct citing page contributes
+        breadth_bonus = len(citing_pages) * 2.0
+        # bridge: how many concept/pattern connections are grounded via a source page
+        # that references this missing paper
+        bridge_bonus = sum(bridge_index.get(pg, 0) for pg in citing_pages) * 3.0
+        total_score = structural_score + breadth_bonus + bridge_bonus
 
         # Build search query (first 6 words of title, minus last)
         words = ref["title"].split()

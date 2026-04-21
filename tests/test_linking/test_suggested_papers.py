@@ -77,7 +77,8 @@ def test_rebuild_ranks_by_reference_count(tmp_path):
         _write_roadmap(staging, pid, [ref])
     rebuild_suggested_papers(wiki, reg, staging, "2026-04-15", TEMPLATES_DIR)
     text = (wiki / "suggested_papers.md").read_text()
-    assert "## High priority" in text
+    # 3 citing papers → score ≥ 1.5, so paper appears in Critical or High priority
+    assert ("## Critical" in text or "## High priority" in text)
     assert "scVI (Lopez et al., 2018)" in text
 
 

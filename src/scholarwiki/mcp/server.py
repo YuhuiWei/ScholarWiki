@@ -9,7 +9,7 @@ from mcp.types import Tool, TextContent
 
 from ..config import load_config
 from ..registry import load_registry
-from .tools import search_wiki, read_page, read_style_page
+from .tools import search_wiki, read_page, read_style_page, read_source_pdf_section
 
 
 def create_server(config_path: str = "config.yaml") -> Server:
@@ -106,6 +106,38 @@ def create_server(config_path: str = "config.yaml") -> Server:
                 description="Quick overview of the knowledge base: paper counts, concept pages, patterns, styles.",
                 inputSchema={"type": "object", "properties": {}},
             ),
+            Tool(
+                name="wiki_source_pdf",
+                description=(
+                    "Read a section of a paper's source PDF (L3 access). "
+                    "Use when the wiki summary is insufficient and you need the original text. "
+                    "Sections: abstract, introduction, methods, results, discussion, full, "
+                    "or a page number (e.g., '3')."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "paper_slug": {
+                            "type": "string",
+                            "description": "Paper slug (e.g., 'lopez2018_scvi') or paper_id",
+                        },
+                        "section": {
+                            "type": "string",
+                            "description": (
+                                "Section to read: abstract, introduction, methods, results, "
+                                "discussion, full, or a 1-based page number"
+                            ),
+                            "default": "abstract",
+                        },
+                        "max_chars": {
+                            "type": "integer",
+                            "description": "Maximum characters to return (default 8000)",
+                            "default": 8000,
+                        },
+                    },
+                    "required": ["paper_slug"],
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -155,6 +187,17 @@ def create_server(config_path: str = "config.yaml") -> Server:
             reg = load_registry(cfg.paths.raw)
             from ..maintenance.stats import generate_stats
             return [TextContent(type="text", text=generate_stats(wiki_dir, reg))]
+
+        elif name == "wiki_source_pdf":
+            reg = load_registry(cfg.paths.raw)
+            text = read_source_pdf_section(
+                paper_slug=arguments["paper_slug"],
+                section=arguments.get("section", "abstract"),
+                raw_dir=cfg.paths.raw,
+                registry=reg,
+                max_chars=arguments.get("max_chars", 8000),
+            )
+            return [TextContent(type="text", text=text)]
 
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
