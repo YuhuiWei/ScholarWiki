@@ -213,6 +213,9 @@ def generate_concept_mapping(
     key_experiment_summary = "; ".join(summary_parts)
 
     topic_area = writing.get("topic_area", "") or ""
+    # Split comma-separated topic_area into individual tags for Jaccard clustering
+    topic_tags = [t.strip() for t in topic_area.split(",") if t.strip()] if topic_area else []
+
     return {
         "paper_id": paper_id,
         "concept_contributions": concept_contributions,
@@ -224,6 +227,6 @@ def generate_concept_mapping(
         "writing_signals": {
             "venue": writing.get("venue", "") or "",
             "topic_area": topic_area,
-            "topic_tags": [topic_area] if topic_area else [],
+            "topic_tags": topic_tags,
         },
     }

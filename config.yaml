@@ -19,7 +19,7 @@ linking:
   synthesis_model: "gpt-5"
   style_model: "gpt-4.1"
   min_papers_for_concept: 2
-  min_papers_for_style: 2
+  min_papers_for_style: 1
 
 sync:
   method: "rsync"
