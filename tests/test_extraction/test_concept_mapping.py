@@ -179,3 +179,66 @@ def test_pattern_signals_always_has_methodological_tags(tmp_path):
     result = generate_concept_mapping("paper_abc", tmp_path, concept_index=[])
     assert "methodological_tags" in result["pattern_signals"]
     assert result["pattern_signals"]["methodological_tags"] == []
+
+
+def test_broad_concept_qualified_with_domain_context(tmp_path):
+    """Broad concepts get qualified with the paper's domain tags."""
+    _write_staging(tmp_path, knowledge={
+        "knowledge_items": [
+            {"id": "k1", "claim": "Transfer learning enables cross-tissue prediction.",
+             "evidence_type": "experimental", "confidence": "high",
+             "supporting_data": None,
+             "domain_tags": ["single-cell genomics", "deep learning", "genomics"],
+             "related_concepts": ["transfer learning"],
+             "quantitative_result": None},
+        ]
+    })
+    result = generate_concept_mapping("paper_abc", tmp_path, concept_index=[])
+    names = [c["concept_name"] for c in result["concept_contributions"]]
+
+    # "transfer learning" alone should not appear — it must be qualified
+    assert "transfer learning" not in names
+    # Qualified form should exist
+    assert any("transfer learning for" in n for n in names)
+
+
+def test_broad_concept_unqualified_when_no_context(tmp_path):
+    """Broad concept without domain_tags or topic_area stays unqualified (best effort)."""
+    _write_staging(tmp_path, knowledge={
+        "knowledge_items": [
+            {"id": "k1", "claim": "X", "evidence_type": "experimental", "confidence": "high",
+             "supporting_data": None, "domain_tags": [],
+             "related_concepts": ["transfer learning"],
+             "quantitative_result": None},
+        ]
+    })
+    result = generate_concept_mapping("paper_abc", tmp_path, concept_index=[])
+    names = [c["concept_name"] for c in result["concept_contributions"]]
+    # No qualifier available — falls back to original name
+    assert "transfer learning" in names
+
+
+def test_pretraining_variants_deduplicated(tmp_path):
+    """pre-training, pretraining, pre training all normalize to the same concept."""
+    _write_staging(tmp_path, knowledge={
+        "knowledge_items": [
+            {"id": "k1", "claim": "X", "evidence_type": "experimental", "confidence": "high",
+             "supporting_data": None, "domain_tags": [],
+             "related_concepts": ["pre-training"],
+             "quantitative_result": None},
+            {"id": "k2", "claim": "Y", "evidence_type": "experimental", "confidence": "high",
+             "supporting_data": None, "domain_tags": [],
+             "related_concepts": ["pretraining"],
+             "quantitative_result": None},
+            {"id": "k3", "claim": "Z", "evidence_type": "experimental", "confidence": "high",
+             "supporting_data": None, "domain_tags": [],
+             "related_concepts": ["pre training"],
+             "quantitative_result": None},
+        ]
+    })
+    result = generate_concept_mapping("paper_abc", tmp_path, concept_index=[])
+    names = [c["concept_name"] for c in result["concept_contributions"]]
+
+    # All three spelling variants should merge into one concept entry
+    pre_training_entries = [n for n in names if "pre" in n.lower() and "train" in n.lower()]
+    assert len(pre_training_entries) == 1

@@ -11,11 +11,33 @@ For each finding, extract the following fields exactly:
 - confidence: One of: high | medium | low (based on how strongly the paper itself supports the claim)
 - supporting_data: The specific data, figure, table, or statistical result that backs this claim.
 - domain_tags: A list of scientific domain tags (e.g. ["machine learning", "protein folding"]).
-- related_concepts: A list of 3-5 broad scientific topics this finding relates to. Choose terms at \
-  the level of a Wikipedia article in a specialized encyclopedia — broad enough that multiple papers \
-  in the field would discuss them, specific enough to have a coherent page. \
-  Good examples: ["single-cell perturbation prediction", "protein language models", \
-  "vision-language alignment", "batch correction in scRNA-seq", "optimal transport"]. \
+- related_concepts: A list of 3-5 specific research topics this finding relates to. \
+  Name concepts at the level of a FOCUSED REVIEW PAPER or CONFERENCE WORKSHOP — specific enough \
+  that a 20-50 paper review could be written about it, not so broad that it spans 10,000+ papers. \
+  \
+  TOO BROAD (textbook-chapter level — NEVER use these): \
+  "machine learning", "deep learning", "transfer learning", "fine-tuning", \
+  "representation learning", "self-supervised learning", "few-shot learning", \
+  "zero-shot learning", "pre-training", "scaling laws", "transformer architecture", \
+  "large language models", "predictive modeling", "multi-task learning", \
+  "prompt engineering", "neural networks", "generative models", \
+  "protein structure", "gene expression", "cell biology", "drug discovery". \
+  \
+  GOOD (specific research topic level — use these): \
+  "vision token compression in multimodal LLMs", \
+  "cross-modal attention fusion in transformer layers", \
+  "transfer learning for single-cell foundation models", \
+  "instruction tuning for biological question answering", \
+  "optimal transport for perturbation response modeling", \
+  "self-supervised gene program discovery from scRNA-seq", \
+  "scaling laws for protein language models", \
+  "in-context learning for molecular property prediction", \
+  "attention head specialization in genomic transformers", \
+  "perturbation prediction in virtual cell models". \
+  \
+  THE TEST: Could this concept name be the title of a 20-50 paper focused review? \
+  If yes → use it. If it spans 10,000+ papers → it is too broad, make it more specific. \
+  \
   Do NOT include: paper citations ("Vaswani et al. 2017"), individual metrics ("AUROC", "F1"), \
   methodological terms ("benchmarking", "scalability", "ablation studies", "reproducibility"), \
   or narrow implementation details ("rotary position embedding", "frozen encoders").

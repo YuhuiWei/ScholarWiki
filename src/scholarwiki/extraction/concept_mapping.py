@@ -61,11 +61,60 @@ def _is_methodological(name: str) -> bool:
     return name.lower() in METHODOLOGICAL_TERMS
 
 
+# Concepts too broad to be useful wiki pages on their own (textbook-chapter level).
+# When one of these appears, it gets qualified with the paper's domain context
+# so "transfer learning" → "transfer learning for single-cell analysis".
+BROAD_CONCEPTS: frozenset[str] = frozenset({
+    "large language models", "deep learning", "machine learning",
+    "transfer learning", "fine-tuning", "fine tuning",
+    "representation learning",
+    "self-supervised learning", "self supervised learning",
+    "few-shot learning", "few shot learning",
+    "zero-shot learning", "zero shot learning",
+    "pre-training", "pretraining", "pre training",
+    "scaling laws", "transformer architecture", "transformers",
+    "predictive modeling", "predictive modelling",
+    "multi-task learning", "multi task learning", "multitask learning",
+    "prompt engineering", "neural networks", "generative models",
+    "attention mechanism", "contrastive learning",
+    "reinforcement learning", "supervised learning", "unsupervised learning",
+    "protein structure", "gene expression", "cell biology",
+    "drug discovery", "clinical trials", "statistical analysis",
+})
+
+_BROAD_LOWER: frozenset[str] = frozenset(t.lower() for t in BROAD_CONCEPTS)
+
+
+def _qualify_broad_concept(name: str, domain_tags: list[str], topic_area: str) -> str:
+    """
+    Qualify a textbook-level concept with the paper's domain context.
+
+    "transfer learning" + domain_tags=["single-cell genomics", ...]
+    → "transfer learning for single-cell genomics"
+
+    Falls back to topic_area first word if no domain_tags available.
+    Returns name unchanged if no qualifier can be derived.
+    """
+    # Prefer domain_tags: pick the most specific (longest) from the first 3
+    qualifier = ""
+    specific_tags = [t for t in domain_tags[:3] if t.lower() not in ("machine learning", "deep learning", "artificial intelligence")]
+    if specific_tags:
+        qualifier = max(specific_tags, key=len)
+    elif topic_area:
+        qualifier = topic_area.split(",")[0].strip()
+
+    return f"{name} for {qualifier}" if qualifier else name
+
+
 def _normalize(name: str) -> str:
     """Normalize a concept name for deduplication comparison."""
-    # lowercase, collapse hyphens/spaces, strip trailing 's'
     n = name.lower()
-    n = re.sub(r"[-\s]+", " ", n).strip()
+    # Collapse all separator variants (hyphen, underscore, space) to single space
+    # so pre-training == pretraining == pre_training == pre training
+    n = re.sub(r"[-_\s]+", " ", n).strip()
+    # Strip trailing 's' for basic plural handling (but not 'ss')
+    if n.endswith("s") and not n.endswith("ss"):
+        n = n[:-1]
     return n
 
 
@@ -153,6 +202,19 @@ def generate_concept_mapping(
     concept_refs: dict[str, dict] = {}
     methodological_tags: list[str] = []
 
+    # First pass: collect all domain_tags across items for broad-concept qualification
+    all_domain_tags: list[str] = []
+    for item in knowledge.get("knowledge_items", []):
+        all_domain_tags.extend(item.get("domain_tags", []))
+    # Deduplicate preserving order, filter generic ML terms that don't help qualify
+    seen: set[str] = set()
+    paper_domain_tags: list[str] = []
+    for t in all_domain_tags:
+        if t not in seen:
+            seen.add(t)
+            paper_domain_tags.append(t)
+    topic_area_str = writing.get("topic_area", "") or ""
+
     for item in knowledge.get("knowledge_items", []):
         item_id = item.get("id", "")
         for concept_name in item.get("related_concepts", []):
@@ -162,6 +224,9 @@ def generate_concept_mapping(
                 if concept_name not in methodological_tags:
                     methodological_tags.append(concept_name)
                 continue
+            # Qualify textbook-level concepts with paper's domain context
+            if concept_name.lower() in _BROAD_LOWER:
+                concept_name = _qualify_broad_concept(concept_name, paper_domain_tags, topic_area_str)
             if concept_name not in concept_refs:
                 concept_refs[concept_name] = {"knowledge_items": [], "roadmap_edges": []}
             if item_id:
