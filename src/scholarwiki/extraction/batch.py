@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import io
 import json
 from pathlib import Path
@@ -26,6 +27,36 @@ from .prompts.roadmap import SYSTEM_PROMPT as ROADMAP_PROMPT
 from .prompts.writing import MODULE_NAME as WRITING_MODULE
 from .prompts.writing import SYSTEM_PROMPT as WRITING_PROMPT
 from .text_extractor import extract_text
+
+_POLL_INTERVAL = 60   # seconds between status checks during auto-retry waits
+
+
+async def _poll_until_complete(client: AsyncOpenAI, batch_id: str, timeout: int = 3600) -> object:
+    """Poll batch until completed/failed/cancelled. Returns final batch object."""
+    elapsed = 0
+    while elapsed < timeout:
+        batch = await client.batches.retrieve(batch_id)
+        if batch.status in ("completed", "failed", "cancelled", "expired"):
+            return batch
+        await asyncio.sleep(_POLL_INTERVAL)
+        elapsed += _POLL_INTERVAL
+    return await client.batches.retrieve(batch_id)
+
+
+def _extract_503_ids(error_file_text: str) -> list[str]:
+    """Return custom_ids from error file entries that are 503 Service Unavailable."""
+    ids: list[str] = []
+    for line in error_file_text.strip().split("\n"):
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+            if item.get("response", {}).get("status_code") == 503:
+                ids.append(item["custom_id"])
+        except json.JSONDecodeError:
+            continue
+    return ids
+
 
 _MODULES: list[tuple[str, str]] = [
     (KNOWLEDGE_MODULE, KNOWLEDGE_PROMPT),
@@ -146,7 +177,74 @@ async def collect_batch(
         return result
 
     file_content = await client.files.content(batch.output_file_id)
-    lines = file_content.text.strip().split("\n")
+    output_lines = file_content.text
+
+    # Auto-retry 503 failures: wait 10 min, retry up to 3 total attempts
+    # If a retry has >50% failure rate, wait 30 min before the next attempt.
+    model = cfg.extraction.model
+    max_tokens = cfg.extraction.max_tokens_per_request
+    module_map = dict(_MODULES)
+    attempt = 1
+    max_attempts = 3
+
+    while attempt <= max_attempts and batch.error_file_id:
+        err_content = await client.files.content(batch.error_file_id)
+        failed_503_ids = _extract_503_ids(err_content.text)
+        if not failed_503_ids:
+            break  # no 503s to retry
+
+        total_requests = batch.request_counts.total
+        failure_rate = len(failed_503_ids) / total_requests if total_requests else 0
+        wait_minutes = 30 if (attempt > 1 and failure_rate > 0.5) else 10
+        result.errors.append(
+            f"503 retry {attempt}/{max_attempts}: {len(failed_503_ids)} failed "
+            f"({failure_rate:.0%} rate) — waiting {wait_minutes} min before retry"
+        )
+
+        if attempt >= max_attempts:
+            result.errors.append(
+                f"Reached max retry attempts ({max_attempts}). "
+                f"{len(failed_503_ids)} module(s) still failed: "
+                + ", ".join(failed_503_ids)
+            )
+            break
+
+        await asyncio.sleep(wait_minutes * 60)
+
+        # Rebuild requests for only the 503'd custom_ids
+        retry_requests: list[dict] = []
+        for custom_id in failed_503_ids:
+            paper_id, module_name = custom_id.rsplit("_", 1)
+            entry = registry.papers.get(paper_id)
+            if not entry or not entry.file_path or module_name not in module_map:
+                continue
+            text = extract_text(raw_dir.parent / entry.file_path, entry.file_type or "pdf")
+            retry_requests.append(
+                _build_request(paper_id, module_name, module_map[module_name],
+                               text, model, max_tokens)
+            )
+
+        if not retry_requests:
+            break
+
+        jsonl_bytes = "\n".join(json.dumps(r) for r in retry_requests).encode("utf-8")
+        file_obj = await client.files.create(
+            file=("retry_503.jsonl", io.BytesIO(jsonl_bytes), "application/jsonl"),
+            purpose="batch",
+        )
+        retry_batch_obj = await client.batches.create(
+            input_file_id=file_obj.id,
+            endpoint="/v1/chat/completions",
+            completion_window="24h",
+        )
+        batch = await _poll_until_complete(client, retry_batch_obj.id)
+        if batch.output_file_id:
+            extra = await client.files.content(batch.output_file_id)
+            output_lines += "\n" + extra.text
+
+        attempt += 1
+
+    lines = output_lines.strip().split("\n")
 
     # Parse and group results by paper_id
     paper_modules: dict[str, dict[str, Any]] = {}

@@ -129,20 +129,22 @@ What does the research collectively show? What is established with confidence?
 ## Key findings
 The most important results. Cite papers inline with [[paper_slug]].
 Include quantitative results where available.
+When a finding is mathematical (evidence_type="mathematical"), embed the formula
+inline using a $$...$$ block immediately followed by explanation of what each term
+does and WHY the authors chose this formulation over simpler alternatives:
 
-## Mathematical formulations
-Only include this section if any of the findings have evidence_type="mathematical".
-For each such finding, render its formula in a $$...$$ block (Obsidian MathJax):
+  Example:
+  "[[paper_slug]] defines the training objective as:
 
-$$
-<latex_formula_here>
-$$
+  $$L = \\lambda_1 L_{\\text{MLM}} + \\lambda_2 L_{\\text{recon}}$$
 
-**Variables:** symbol — meaning (list from the formulation.variables dict)
-**What it computes:** plain_english description
-**Paper:** [[paper_slug]]
+  The MLM term learns dependencies from masked positions; the reconstruction term
+  (L1 over all genes) stabilizes training by preventing the model from ignoring
+  low-expression genes that are rarely masked — a known failure mode of pure MLM
+  on sparse scRNA-seq data."
 
-If no mathematical findings exist for this concept, omit this section entirely.
+Never create a standalone "Mathematical formulations" appendix section.
+Every equation must appear in context with explanation.
 
 ## Contradictions
 Where do papers disagree? Present both sides with citations.
@@ -208,27 +210,31 @@ For each paper, describe the specific implementation choices: what they measured
 controlled for confounders, what computational steps they used. Use [[paper_slug]] citations.
 Show variation across implementations — what differs, what stays constant.
 
+When a pipeline step has a mathematical_detail (loss function, objective, update rule),
+embed the formula inline within the description of that step, immediately followed by
+explanation of each term and why the authors chose this formulation:
+
+  Example:
+  "[[paper_slug]] trains with a combined objective:
+
+  $$L = \\lambda_{\\text{MLM}} L_{\\text{MLM}} + \\lambda_{\\text{recon}} L_{\\text{recon}}$$
+
+  The MLM term learns gene-gene dependencies; the L1 reconstruction term prevents
+  ignoring low-expression genes rarely selected for masking."
+
+If Paper B's formula extends Paper A's, make the relationship explicit inline:
+what term was added, what problem it solved that Paper A's formulation couldn't handle.
+
 ## Practical considerations
 What reagents, compute, or data prerequisites does this approach require?
 What sample sizes or replication levels are typical?
 What controls are essential vs. optional?
+When comparing formulations across papers, include the equations here with explanation
+of what each paper adds or changes and why — no standalone formulas appendix.
 
 ## Known failure modes
 What does this methodology reliably fail to detect or account for? \
 What do the papers collectively reveal about its blind spots?
-
-## Key formulas
-Only include this section when pipeline steps have mathematical_detail.
-For each such step, render its formula in a $$...$$ block:
-
-$$
-<latex_formula_here>
-$$
-
-**What it computes:** plain_english description
-**Used in:** [[paper_slug]] (step N)
-
-Omit this section entirely if no pipeline steps define a formula.
 
 Rules:
 - Be concrete and actionable — a researcher should know exactly what protocol to follow
@@ -237,6 +243,8 @@ Rules:
 - Name actual tools, assays, datasets, or models where the papers mention them
 - Never describe the pattern as "problem → solution → validation" — describe the actual method
 - LaTeX in $$...$$ blocks renders natively in Obsidian — always use $$...$$ not $...$
+- Never create a standalone "Key formulas" or "Mathematical formulations" section —
+  every equation must appear in context with explanation of terms and design rationale
 """ + _CONNECTIONS_BLOCK
 
 # ─── Writing style page synthesis (GPT-4.1) ───────────────────────────────────
