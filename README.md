@@ -26,12 +26,14 @@ wiki/
 
 Open the `wiki/` folder as an Obsidian vault. Graph view shows concept connections. Links between pages are real wikilinks (`[[concept_name]]`).
 
+**New to ScholarWiki?** Read the [User Manual](docs/user-manual.md) for a step-by-step guide — covers everything from installing Python and setting up Zotero to browsing your wiki in Obsidian. Written for researchers in any field, no programming background required.
+
 ## Requirements
 
 - Python 3.11+
 - OpenAI API key (GPT-4.1 for extraction, GPT-5 for synthesis)
-- Zotero account + API key (optional, for reference management)
-- Papers sourced via [NEXUS](https://github.com/BDRL/nexus-paper-fetcher) or dropped manually into `manual_inbox/`
+- Zotero account + API key (optional, for reference management and formatted citations)
+- Papers sourced via [NEXUS](https://github.com/YuhuiWei/nexus-paper-fetcher) or dropped manually into `manual_inbox/`
 
 ## Setup
 
@@ -166,6 +168,12 @@ scholarwiki zotero-sync
 ```
 Retry syncing papers that failed to push to Zotero during ingest.
 
+### `backfill-citations`
+```bash
+scholarwiki backfill-citations
+```
+Fetch formatted APA citations from Zotero for all papers that have a Zotero key but no citation stored. Updates both `registry.json` and source page frontmatter.
+
 ## Configuration
 
 `config.yaml` (all paths relative to working directory where you run `scholarwiki`):
@@ -225,8 +233,10 @@ Create `.claude/mcp.json` in any project that should have wiki access:
 | `wiki_pattern` | Read a design pattern page |
 | `wiki_style` | Read a writing style guide by venue + topic |
 | `wiki_paper` | Read a paper's source page by slug |
+| `wiki_bibliography` | Generate formatted APA bibliography from paper slugs |
 | `wiki_suggest` | List papers referenced but not yet downloaded |
 | `wiki_stats` | Quick knowledge base overview |
+| `wiki_source_pdf` | Read sections of the original PDF (abstract, methods, etc.) |
 
 ## SLURM automation
 
@@ -265,7 +275,7 @@ src/scholarwiki/
 ├── pipeline.py          # process-batch orchestration
 ├── l1_page.py           # render stub source pages
 ├── wiki.py              # index.md and log.md updates
-├── zotero.py            # Zotero push
+├── zotero.py            # Zotero push + citation fetch
 ├── manual_queue.py      # raw/manual.md queue
 ├── ingest/
 │   ├── nexus.py         # nexus_inbox/ processor

@@ -272,28 +272,93 @@ TASKS: list[dict[str, Any]] = [
 # ── wiki retrieval ─────────────────────────────────────────────────────
 # We import the project's own search_wiki and read_page functions
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from scholarwiki.mcp.tools import search_wiki, read_page
+from scholarwiki.mcp.tools import search_wiki, read_page, get_bibliography
+import re as _re
+
+_WIKILINK_RE = _re.compile(r"\[\[([^\]]+)\]\]")
+
+
+def _build_citation_map(slugs: list[str]) -> dict[str, str]:
+    """Build a mapping from slug → APA citation string using wiki source pages."""
+    import yaml
+    cmap: dict[str, str] = {}
+    for slug in slugs:
+        content = read_page(WIKI_DIR, "sources", slug)
+        if not content:
+            continue
+        parts = content.split("---", 2)
+        if len(parts) < 3:
+            continue
+        try:
+            fm = yaml.safe_load(parts[1])
+        except Exception:
+            continue
+        # Build short citation: "Last et al. (Year)"
+        authors = fm.get("authors", [])
+        year = fm.get("year", "n.d.")
+        title = fm.get("title", slug)
+        if authors:
+            first_last = str(authors[0]).split(",")[0].strip().split()[-1]
+            if len(authors) > 2:
+                short_author = f"{first_last} et al."
+            elif len(authors) == 2:
+                second_last = str(authors[1]).split(",")[0].strip().split()[-1]
+                short_author = f"{first_last} & {second_last}"
+            else:
+                short_author = first_last
+        else:
+            short_author = "Unknown"
+        cmap[slug] = f"{short_author} ({year})"
+    return cmap
+
+
+def _replace_wikilinks(text: str, citation_map: dict[str, str]) -> str:
+    """Replace [[slug]] with (Author, Year) inline citations."""
+    def _replacer(m):
+        slug = m.group(1)
+        if slug in citation_map:
+            return citation_map[slug]
+        # Keep concepts/patterns as readable names
+        return slug.replace("_", " ")
+    return _WIKILINK_RE.sub(_replacer, text)
 
 
 def retrieve_wiki_context(queries: list[str], max_pages: int = 6) -> str:
-    """Retrieve relevant wiki pages for a set of queries."""
+    """Retrieve relevant wiki pages with proper academic citations."""
     seen_paths: set[str] = set()
     pages: list[str] = []
+    all_source_slugs: set[str] = set()
 
     for q in queries:
         results = search_wiki(q, WIKI_DIR, max_results=3)
         for r in results:
             if r["path"] not in seen_paths and len(pages) < max_pages:
                 seen_paths.add(r["path"])
-                # Read full page
                 parts = r["path"].split("/")
                 if len(parts) == 2:
                     subdir, name = parts[0], parts[1].replace(".md", "")
                     content = read_page(WIKI_DIR, subdir, name)
                     if content:
+                        # Collect all source slugs referenced
+                        for m in _WIKILINK_RE.finditer(content):
+                            slug = m.group(1)
+                            if _re.match(r"[a-z]+\d{4}_", slug):
+                                all_source_slugs.add(slug)
                         pages.append(f"=== Wiki: {r['title']} ===\n{content}")
 
-    return "\n\n".join(pages)
+    if not pages:
+        return ""
+
+    # Build citation map and replace wiki-links
+    citation_map = _build_citation_map(list(all_source_slugs))
+    converted_pages = [_replace_wikilinks(p, citation_map) for p in pages]
+
+    # Append bibliography
+    if all_source_slugs:
+        bib = get_bibliography(list(all_source_slugs), WIKI_DIR, None)
+        converted_pages.append(bib)
+
+    return "\n\n".join(converted_pages)
 
 
 # ── condition runners ──────────────────────────────────────────────────
