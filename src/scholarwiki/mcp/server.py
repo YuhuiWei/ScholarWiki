@@ -9,7 +9,7 @@ from mcp.types import Tool, TextContent
 
 from ..config import load_config
 from ..registry import load_registry
-from .tools import search_wiki, read_page, read_style_page, read_source_pdf_section
+from .tools import search_wiki, read_page, read_style_page, read_source_pdf_section, get_bibliography
 
 
 def create_server(config_path: str = "config.yaml") -> Server:
@@ -107,6 +107,28 @@ def create_server(config_path: str = "config.yaml") -> Server:
                 inputSchema={"type": "object", "properties": {}},
             ),
             Tool(
+                name="wiki_bibliography",
+                description=(
+                    "Generate a formatted bibliography from paper slugs or wiki-link keys. "
+                    "Use this when writing academic text to get proper APA citations "
+                    "for papers referenced in the wiki."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "slugs": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "List of paper slugs or wiki-link keys "
+                                "(e.g., ['lopez2018_scvi', 'theodoris2023_transfer'])"
+                            ),
+                        },
+                    },
+                    "required": ["slugs"],
+                },
+            ),
+            Tool(
                 name="wiki_source_pdf",
                 description=(
                     "Read a section of a paper's source PDF (L3 access). "
@@ -187,6 +209,11 @@ def create_server(config_path: str = "config.yaml") -> Server:
             reg = load_registry(cfg.paths.raw)
             from ..maintenance.stats import generate_stats
             return [TextContent(type="text", text=generate_stats(wiki_dir, reg))]
+
+        elif name == "wiki_bibliography":
+            reg = load_registry(cfg.paths.raw)
+            text = get_bibliography(arguments["slugs"], wiki_dir, reg)
+            return [TextContent(type="text", text=text)]
 
         elif name == "wiki_source_pdf":
             reg = load_registry(cfg.paths.raw)

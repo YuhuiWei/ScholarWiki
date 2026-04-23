@@ -192,6 +192,73 @@ def read_source_pdf_section(
     return collected[:max_chars]
 
 
+def get_bibliography(
+    slugs: list[str], wiki_dir: Path, registry: "Registry",
+) -> str:
+    """Build a formatted bibliography from a list of paper slugs or wiki-link keys.
+
+    Looks up each slug in source pages to find the citation field, falling back
+    to reconstructing a citation from frontmatter metadata.
+    """
+    import yaml
+
+    entries: list[str] = []
+    seen: set[str] = set()
+
+    for slug in slugs:
+        slug = slug.strip().strip("[]")  # handle [[slug]] format
+        if slug in seen:
+            continue
+        seen.add(slug)
+
+        content = read_page(wiki_dir, "sources", slug)
+        if not content:
+            entries.append(f"- [{slug}] — *not found in wiki*")
+            continue
+
+        # Parse frontmatter
+        parts = content.split("---", 2)
+        if len(parts) < 3:
+            entries.append(f"- [{slug}] — *could not parse frontmatter*")
+            continue
+
+        try:
+            fm = yaml.safe_load(parts[1])
+        except Exception:
+            fm = {}
+
+        citation = fm.get("citation")
+        if citation:
+            entries.append(f"- {citation}")
+        else:
+            # Reconstruct from metadata
+            authors = fm.get("authors", [])
+            year = fm.get("year", "n.d.")
+            title = fm.get("title", slug)
+            venue = fm.get("venue", "")
+            doi = fm.get("doi", "")
+
+            if authors:
+                # APA-style: Last, F. I., Last2, F. I. (Year). Title. Venue.
+                author_str = "; ".join(str(a) for a in authors[:3])
+                if len(authors) > 3:
+                    author_str += " et al."
+            else:
+                author_str = "Unknown"
+
+            cite = f"{author_str} ({year}). {title}."
+            if venue:
+                cite += f" *{venue}*."
+            if doi:
+                cite += f" https://doi.org/{doi}"
+            entries.append(f"- {cite}")
+
+    if not entries:
+        return "No papers specified."
+
+    return "## Bibliography\n\n" + "\n".join(entries)
+
+
 def read_style_page(wiki_dir: Path, venue: str, topic: str = "") -> str | None:
     """Find a writing style page matching venue and optional topic."""
     style_dir = wiki_dir / "writing"

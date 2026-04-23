@@ -26,6 +26,7 @@ class PaperEntry(BaseModel):
     file_path: Optional[str] = None            # relative: raw/papers/<filename>
     file_type: Optional[FileType] = None
     zotero_key: Optional[str] = None
+    citation: Optional[str] = None             # formatted citation from Zotero (APA)
     ingested_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     extraction_status: ExtractionStatus = "pending"
     extraction_batch_id: Optional[str] = None

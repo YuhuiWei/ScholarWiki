@@ -31,5 +31,13 @@ wiki/
 .claude/
 CLAUDE.md
 
+# Runtime logs and review artifacts
+logs/
+concept_review.txt
+docs/superpowers/
+
+# Eval raw results (contain LLM-generated responses)
+eval/results/eval_results.json
+
 # OS
 .DS_Store

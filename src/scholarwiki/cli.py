@@ -4,6 +4,7 @@ from typing import Optional
 import asyncio
 import typer
 from .config import load_config
+from .cost_guard import check_extraction_cap, check_linking_cap, CostCapExceeded
 from .registry import load_registry, get_pending, save_registry
 from .ingest.nexus import ingest_nexus_inbox
 from .ingest.manual import ingest_manual_inbox
@@ -114,6 +115,12 @@ def extract(
         if not pending:
             typer.echo("No papers pending extraction.")
             return
+        try:
+            est = check_extraction_cap(len(pending), cfg.extraction.max_cost_usd)
+            typer.echo(f"Cost estimate: {est}")
+        except CostCapExceeded as e:
+            typer.echo(f"COST CAP: {e}", err=True)
+            raise typer.Exit(1)
         typer.echo(f"Submitting {len(pending)} paper(s) to OpenAI Batch API...")
         result = asyncio.run(submit_batch(pending, cfg.paths.raw, cfg))
         for paper in pending:
@@ -237,11 +244,15 @@ def link(
             typer.echo("No extracted papers to link.")
             return
         typer.echo(f"Submitting link batches for {len(to_link)} paper(s)...")
-        result = asyncio.run(
-            submit_link_batches(
-                to_link, reg, cfg.paths.raw, cfg.paths.staging, cfg.paths.wiki, cfg
+        try:
+            result = asyncio.run(
+                submit_link_batches(
+                    to_link, reg, cfg.paths.raw, cfg.paths.staging, cfg.paths.wiki, cfg
+                )
             )
-        )
+        except CostCapExceeded as e:
+            typer.echo(f"COST CAP: {e}", err=True)
+            raise typer.Exit(1)
         typer.echo(
             f"Submitted: gpt5={result.gpt5_batch_id}, gpt41={result.gpt41_batch_id}"
         )
@@ -404,3 +415,71 @@ def zotero_sync(
         for err in result.errors:
             typer.echo(f"  ERROR: {err}", err=True)
         typer.echo("Run 'scholarwiki zotero-sync' again to retry remaining failures.")
+
+
+@app.command(name="backfill-citations")
+def backfill_citations_cmd(
+    config: Path = typer.Option(_DEFAULT_CONFIG, "--config", "-c"),
+) -> None:
+    """Fetch formatted citations from Zotero for all papers with zotero_keys.
+
+    Updates registry.json and rewrites source page frontmatter with the citation field.
+    """
+    import re as _re
+
+    from .zotero import fetch_citations_bulk
+
+    cfg = load_config(config)
+    reg = load_registry(cfg.paths.raw)
+
+    # Find papers that have zotero_key but no citation
+    needs_citation = [
+        p for p in reg.papers.values()
+        if p.zotero_key and not p.citation
+    ]
+    if not needs_citation:
+        typer.echo("All papers with Zotero keys already have citations.")
+        return
+
+    typer.echo(f"Fetching citations for {len(needs_citation)} paper(s)...")
+    keys = [p.zotero_key for p in needs_citation]
+    citations = fetch_citations_bulk(keys, cfg)
+
+    updated = 0
+    for entry in needs_citation:
+        citation = citations.get(entry.zotero_key)
+        if not citation:
+            continue
+        entry.citation = citation
+        updated += 1
+
+        # Update source page frontmatter if it exists
+        if entry.wiki_source_page:
+            page_path = Path(entry.wiki_source_page)
+            if not page_path.is_absolute():
+                page_path = cfg.paths.wiki / "sources" / page_path.name
+            if page_path.exists():
+                text = page_path.read_text(encoding="utf-8")
+                escaped = citation.replace('"', '\\"')
+                if "citation:" not in text:
+                    # Insert citation after zotero_key line, or before date_added
+                    text = _re.sub(
+                        r'(zotero_key: "[^"]*"\n)',
+                        f'\\1citation: "{escaped}"\n',
+                        text,
+                        count=1,
+                    )
+                    if "citation:" not in text:
+                        # Fallback: insert before date_added
+                        text = _re.sub(
+                            r'(date_added:)',
+                            f'citation: "{escaped}"\n\\1',
+                            text,
+                            count=1,
+                        )
+                    page_path.write_text(text, encoding="utf-8")
+
+    save_registry(reg, cfg.paths.raw)
+    typer.echo(f"Updated {updated}/{len(needs_citation)} paper(s) with citations.")
+    if updated < len(needs_citation):
+        typer.echo(f"  {len(needs_citation) - updated} paper(s) could not be fetched from Zotero.")

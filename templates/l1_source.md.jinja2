@@ -12,6 +12,7 @@ domain_category: {{ entry.domain_category or "unknown" }}
 domain_tags:
 {% for tag in entry.domain_tags %}  - {{ tag }}
 {% endfor %}{% if entry.zotero_key %}zotero_key: "{{ entry.zotero_key }}"{% endif %}
+{% if entry.citation %}citation: "{{ entry.citation | replace('"', '\\"') }}"{% endif %}
 date_added: "{{ entry.ingested_at.strftime('%Y-%m-%d') }}"
 extraction_status: {{ entry.extraction_status }}
 ---
@@ -22,6 +23,9 @@ extraction_status: {{ entry.extraction_status }}
 **Year:** {{ entry.year or "unknown" }} | **Venue:** {{ entry.venue or "unknown" }}
 {% if entry.doi %}**DOI:** [{{ entry.doi }}](https://doi.org/{{ entry.doi }}){% endif %}
 {% if entry.arxiv_id %}**arXiv:** [{{ entry.arxiv_id }}](https://arxiv.org/abs/{{ entry.arxiv_id }}){% endif %}
+{% if entry.citation %}
+**Cite as:** {{ entry.citation }}
+{% endif %}
 
 ## Summary
 <!-- Backfilled after LLM extraction -->

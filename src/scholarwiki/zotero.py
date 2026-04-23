@@ -108,6 +108,69 @@ def push_paper(entry: PaperEntry, cfg: Config) -> Optional[str]:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Citation retrieval
+# ---------------------------------------------------------------------------
+
+_CITATION_STYLE = "apa"  # Zotero CSL style ID
+
+
+def _strip_html(html: str) -> str:
+    """Strip HTML tags to produce plain-text citation."""
+    import re
+    text = re.sub(r"<[^>]+>", "", html)
+    return text.strip()
+
+
+def fetch_citation(
+    zotero_key: str, cfg: Config, style: str = _CITATION_STYLE,
+) -> Optional[str]:
+    """Fetch a formatted citation string from Zotero for a given item key.
+
+    Returns plain-text citation (e.g. APA format), or None on failure.
+    """
+    if not cfg.zotero.api_key or not cfg.zotero.library_id:
+        return None
+    try:
+        zot = zotero.Zotero(
+            cfg.zotero.library_id, cfg.zotero.library_type, cfg.zotero.api_key,
+        )
+        # include=bib returns bibliography entry alongside JSON data
+        item_data = zot.item(zotero_key, include="bib", style=style)
+        # pyzotero returns the item dict with a 'bib' key containing HTML
+        bib_html = item_data.get("bib", "")
+        if bib_html:
+            return _strip_html(bib_html)
+        return None
+    except Exception:
+        return None
+
+
+def fetch_citations_bulk(
+    zotero_keys: list[str], cfg: Config, style: str = _CITATION_STYLE,
+) -> dict[str, str]:
+    """Fetch formatted citations for multiple items. Returns {key: citation}."""
+    if not cfg.zotero.api_key or not cfg.zotero.library_id:
+        return {}
+    results: dict[str, str] = {}
+    try:
+        zot = zotero.Zotero(
+            cfg.zotero.library_id, cfg.zotero.library_type, cfg.zotero.api_key,
+        )
+        # Fetch in batches of 50 (Zotero API limit)
+        for i in range(0, len(zotero_keys), 50):
+            batch = zotero_keys[i:i + 50]
+            items = zot.items(itemKey=",".join(batch), include="bib", style=style)
+            for item in items:
+                key = item.get("key", "")
+                bib_html = item.get("bib", "")
+                if key and bib_html:
+                    results[key] = _strip_html(bib_html)
+    except Exception:
+        pass
+    return results
+
+
 def sync_pending(registry: Registry, cfg: Config, raw_dir: Path) -> ZoteroSyncResult:
     """Push all papers with zotero_key=None. Saves registry on any success."""
     from .registry import save_registry

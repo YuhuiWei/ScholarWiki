@@ -13,7 +13,7 @@ from ..registry import load_registry, save_registry, add_paper, has_paper
 from ..l1_page import write_l1_page
 from ..manual_queue import load_manual_queue, mark_downloaded, ManualQueue, ManualEntry
 from ..wiki import update_index, append_log
-from ..zotero import push_paper
+from ..zotero import push_paper, fetch_citation
 
 
 _FUZZY_THRESHOLD = 85
@@ -236,6 +236,8 @@ def ingest_manual_inbox(
             entry.zotero_key = push_paper(entry, cfg)
             if entry.zotero_key is None:
                 result.zotero_failed += 1
+            else:
+                entry.citation = fetch_citation(entry.zotero_key, cfg)
             page_path = write_l1_page(entry, cfg.paths.wiki, templates_dir)
             entry.wiki_source_page = str(page_path)
             add_paper(registry, entry)
@@ -272,6 +274,8 @@ def ingest_manual_inbox(
             entry.zotero_key = push_paper(entry, cfg)
             if entry.zotero_key is None:
                 result.zotero_failed += 1
+            else:
+                entry.citation = fetch_citation(entry.zotero_key, cfg)
             page_path = write_l1_page(entry, cfg.paths.wiki, templates_dir)
             entry.wiki_source_page = str(page_path)
             add_paper(registry, entry)
