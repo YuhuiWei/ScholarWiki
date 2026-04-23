@@ -33,7 +33,7 @@ Open the `wiki/` folder as an Obsidian vault. Graph view shows concept connectio
 - Python 3.11+
 - OpenAI API key (GPT-4.1 for extraction, GPT-5 for synthesis)
 - Zotero account + API key (optional, for reference management and formatted citations)
-- Papers sourced via [NEXUS](https://github.com/YuhuiWei/nexus-paper-fetcher) or dropped manually into `manual_inbox/`
+- Papers sourced via [ScholarFetch](https://github.com/YuhuiWei/ScholarFetch) or dropped manually into `manual_inbox/`
 
 ## Setup
 
