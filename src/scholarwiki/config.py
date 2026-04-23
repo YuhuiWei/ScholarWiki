@@ -43,6 +43,7 @@ class LinkingConfig(BaseModel):
     synthesis_model: str = "gpt-5"   # GPT-5 for concept + pattern synthesis
     style_model: str = "gpt-4.1"     # GPT-4.1 for writing style synthesis
     min_papers_for_concept: int = 2  # concepts seen in fewer papers stay pending
+    min_papers_for_pattern: int = 1  # each paper has a unique methodology pattern
     min_papers_for_style: int = 2    # style groups with fewer papers stay pending (1 = every paper)
     max_cost_usd: float = 3.0        # abort linking if estimated cost exceeds this
 

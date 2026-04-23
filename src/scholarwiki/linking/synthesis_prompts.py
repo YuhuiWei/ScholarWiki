@@ -15,36 +15,37 @@ key_experiment_summary: ordered pipeline steps describing HOW the experiment was
 methodological_tags: terms describing specific experimental techniques used.
 
 Your task:
-1. Group papers that use the SAME SPECIFIC EXPERIMENTAL APPROACH, regardless of research domain.
+1. Identify the SPECIFIC EXPERIMENTAL APPROACH each paper uses, regardless of research domain.
    Focus on the concrete method (e.g. "perturbation + transcriptomic readout", \
 "held-out benchmark comparison", "multi-cohort replication + ablation", \
 "synthetic dataset generation + cross-model evaluation").
 2. Assign papers to existing pattern pages where the fit is strong (exact method match).
-3. Propose new pattern slugs ONLY if >=2 papers share a specific methodology.
-4. Papers without a matching group go in "unassigned".
+3. Group papers that share a specific methodology under the same pattern slug.
+4. Papers with a UNIQUE methodology that no other paper shares still get their OWN pattern slug — \
+every paper should be assigned to exactly one pattern.
 
 Cluster by HOW the experiment is conducted, not WHAT domain it's in:
 - Too abstract: "validation_study", "novel_method_benchmark", "problem_solving"
 - Concrete: "perturbation_transcriptome_analysis", "multi_benchmark_ablation", \
 "synthetic_data_comparative_evaluation"
 
-Aim for 3-8 concrete clusters per run.
+Every paper must appear in exactly one assignment. Do NOT leave papers unassigned.
 
 Return JSON exactly:
 {
   "assignments": {
-    "<pattern_slug>": ["paper_id_1", "paper_id_2"]
+    "<pattern_slug>": ["paper_id_1", "paper_id_2"],
+    "<unique_pattern_slug>": ["paper_id_alone"]
   },
   "new_pattern_titles": {
     "<new_slug>": "Human-readable title for new pattern"
-  },
-  "unassigned": ["paper_id_alone"]
+  }
 }
 
 Rules:
 - Pattern slugs: lowercase, underscore-separated, <=5 words, describe the METHOD not the domain
-- A paper appears in exactly one assignment or in unassigned — never both
-- Only include assignments with >=2 papers; single-paper groups go to unassigned
+- A paper appears in exactly one assignment — never duplicated
+- Single-paper patterns are allowed — every paper has a methodology worth documenting
 """
 
 # ─── Connection block (shared across all synthesis prompts) ───────────────────

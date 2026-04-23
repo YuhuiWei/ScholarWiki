@@ -20,90 +20,39 @@ def _is_citation(name: str) -> bool:
     return bool(_CITATION_RE.search(name))
 
 
-# Terms that describe HOW research is done, not WHAT it's about.
-# Routed to pattern_signals.methodological_tags instead of concept_contributions.
-METHODOLOGICAL_TERMS: frozenset[str] = frozenset({
-    # Evaluation approach
-    "benchmarking", "benchmark datasets", "benchmark creation",
-    "model benchmarking", "performance benchmarks",
-    "evaluation methodology", "domain-specific evaluation",
-    "diagnostic metrics",
-    # Experimental methodology
-    "ablation studies", "data ablation",
-    "model comparison", "model evaluation",
-    "model selection guidance",
-    # Quality dimensions
-    "generalization", "cross-domain generalization",
-    "out-of-distribution generalization", "cross-task generalization",
-    "scalability", "model robustness",
-    "reproducibility", "research reproducibility",
-    "calibration",
-    # Efficiency dimensions
-    "computational efficiency", "training efficiency",
-    "inference efficiency", "parameter efficiency",
-    "data efficiency", "sample efficiency",
-    "llm efficiency", "llm inference cost",
-    # Data methodology
-    "data quality", "data quality control",
-    "data preprocessing", "noise filtering",
-    "dataset curation",
-    # Training methodology
-    "training stability", "training stabilization",
-    "model initialization", "compute optimization",
-    # Generic outcome terms
-    "state-of-the-art performance", "classification",
-    "imbalanced classification", "multiclass classification",
+# Narrow implementation details, metrics, and hyperparameters that produce
+# noisy one-off concept pages. Does NOT include broad research topics
+# (e.g. "transfer learning", "large language models" are NOT in here).
+NOISE_TERMS: frozenset[str] = frozenset({
+    # Individual evaluation metrics
+    "auroc", "auc", "f1 score", "f1-score", "precision", "recall",
+    "accuracy", "perplexity", "bleu score", "rouge score",
+    "mean squared error", "mse", "rmse", "mae", "r-squared",
+    # Narrow hyperparameters / training tricks
+    "learning rate scheduling", "learning rate warmup", "dropout rate",
+    "batch size", "weight decay", "gradient clipping", "gradient checkpointing",
+    "mixed precision training", "fp16 training", "bf16 training",
+    # Narrow architecture micro-details
+    "rotary position embedding", "rope embedding", "alibi position encoding",
+    "layer normalization", "rms normalization", "gelu activation",
+    "flash attention", "kv cache", "grouped query attention",
+    # Generic dataset / infrastructure terms
+    "data augmentation", "train test split", "cross validation",
+    "hyperparameter tuning", "hyperparameter search",
+    "model checkpointing", "early stopping",
+    # Evaluation/quality process terms (not topical concepts)
+    "benchmarking", "benchmark evaluation", "model benchmarking",
+    "evaluation metrics", "evaluation methodology",
+    "scalability", "robustness", "model robustness",
+    "reproducibility", "generalization",
 })
 
-
-def _is_methodological(name: str) -> bool:
-    """Return True if the concept is a methodological term, not a topical concept."""
-    return name.lower() in METHODOLOGICAL_TERMS
+_NOISE_LOWER: frozenset[str] = frozenset(t.lower() for t in NOISE_TERMS)
 
 
-# Concepts too broad to be useful wiki pages on their own (textbook-chapter level).
-# When one of these appears, it gets qualified with the paper's domain context
-# so "transfer learning" → "transfer learning for single-cell analysis".
-BROAD_CONCEPTS: frozenset[str] = frozenset({
-    "large language models", "deep learning", "machine learning",
-    "transfer learning", "fine-tuning", "fine tuning",
-    "representation learning",
-    "self-supervised learning", "self supervised learning",
-    "few-shot learning", "few shot learning",
-    "zero-shot learning", "zero shot learning",
-    "pre-training", "pretraining", "pre training",
-    "scaling laws", "transformer architecture", "transformers",
-    "predictive modeling", "predictive modelling",
-    "multi-task learning", "multi task learning", "multitask learning",
-    "prompt engineering", "neural networks", "generative models",
-    "attention mechanism", "contrastive learning",
-    "reinforcement learning", "supervised learning", "unsupervised learning",
-    "protein structure", "gene expression", "cell biology",
-    "drug discovery", "clinical trials", "statistical analysis",
-})
-
-_BROAD_LOWER: frozenset[str] = frozenset(t.lower() for t in BROAD_CONCEPTS)
-
-
-def _qualify_broad_concept(name: str, domain_tags: list[str], topic_area: str) -> str:
-    """
-    Qualify a textbook-level concept with the paper's domain context.
-
-    "transfer learning" + domain_tags=["single-cell genomics", ...]
-    → "transfer learning for single-cell genomics"
-
-    Falls back to topic_area first word if no domain_tags available.
-    Returns name unchanged if no qualifier can be derived.
-    """
-    # Prefer domain_tags: pick the most specific (longest) from the first 3
-    qualifier = ""
-    specific_tags = [t for t in domain_tags[:3] if t.lower() not in ("machine learning", "deep learning", "artificial intelligence")]
-    if specific_tags:
-        qualifier = max(specific_tags, key=len)
-    elif topic_area:
-        qualifier = topic_area.split(",")[0].strip()
-
-    return f"{name} for {qualifier}" if qualifier else name
+def _is_noise(name: str) -> bool:
+    """Return True if the concept is a narrow implementation detail or metric."""
+    return name.lower() in _NOISE_LOWER
 
 
 def _normalize(name: str) -> str:
@@ -200,33 +149,12 @@ def generate_concept_mapping(
     # Roadmap edges are citation relationships (paper → paper) — they enrich
     # existing concepts as context but never create new concept pages.
     concept_refs: dict[str, dict] = {}
-    methodological_tags: list[str] = []
-
-    # First pass: collect all domain_tags across items for broad-concept qualification
-    all_domain_tags: list[str] = []
-    for item in knowledge.get("knowledge_items", []):
-        all_domain_tags.extend(item.get("domain_tags", []))
-    # Deduplicate preserving order, filter generic ML terms that don't help qualify
-    seen: set[str] = set()
-    paper_domain_tags: list[str] = []
-    for t in all_domain_tags:
-        if t not in seen:
-            seen.add(t)
-            paper_domain_tags.append(t)
-    topic_area_str = writing.get("topic_area", "") or ""
 
     for item in knowledge.get("knowledge_items", []):
         item_id = item.get("id", "")
         for concept_name in item.get("related_concepts", []):
-            if not concept_name or _is_citation(concept_name):
+            if not concept_name or _is_citation(concept_name) or _is_noise(concept_name):
                 continue
-            if _is_methodological(concept_name):
-                if concept_name not in methodological_tags:
-                    methodological_tags.append(concept_name)
-                continue
-            # Qualify textbook-level concepts with paper's domain context
-            if concept_name.lower() in _BROAD_LOWER:
-                concept_name = _qualify_broad_concept(concept_name, paper_domain_tags, topic_area_str)
             if concept_name not in concept_refs:
                 concept_refs[concept_name] = {"knowledge_items": [], "roadmap_edges": []}
             if item_id:
@@ -287,7 +215,6 @@ def generate_concept_mapping(
         "concept_contributions": concept_contributions,
         "pattern_signals": {
             "logic_pattern": logic.get("logic_pattern", ""),
-            "methodological_tags": methodological_tags,
             "key_experiment_summary": key_experiment_summary,
         },
         "writing_signals": {

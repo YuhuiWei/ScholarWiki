@@ -170,12 +170,14 @@ def rebuild_suggested_papers(
     staging_dir: Path,
     today: str,
     templates_dir: Path | None = None,
-    top_n: int = 30,
+    min_citations: int = 2,
 ) -> None:
     """Rebuild wiki/suggested_papers.md using graph-aware ranking.
 
     Papers are scored by the hub centrality of wiki concept/pattern pages that
-    reference them via roadmap relationships. Top-N are returned.
+    reference them via roadmap relationships.  Only papers cited by at least
+    *min_citations* source pages appear in the wiki page; the full candidate
+    list is saved as ``suggested_papers.json`` for reference.
     """
     tdir = templates_dir or (_PROJECT_ROOT / "templates")
 
@@ -230,15 +232,26 @@ def rebuild_suggested_papers(
             "search_query": search_query,
         })
 
-    # Sort by score descending, cap at top_n
+    # Sort by score descending
     scored.sort(key=lambda x: x["score"], reverse=True)
-    scored = scored[:top_n]
+
+    # Save full candidate list as JSON sidecar (all papers, including single-cite)
+    wiki_dir.mkdir(parents=True, exist_ok=True)
+    json_path = wiki_dir / "suggested_papers.json"
+    json_tmp = json_path.with_suffix(".json.tmp")
+    json_tmp.write_text(
+        json.dumps(scored, indent=2, ensure_ascii=False), encoding="utf-8",
+    )
+    json_tmp.replace(json_path)
+
+    # Filter to papers cited by >= min_citations source pages for wiki display
+    shown = [r for r in scored if len(r["cited_by_pages"]) >= min_citations]
 
     # Tier into Critical (score ≥ 3), High (score ≥ 1.5), Lower (rest)
     critical: list[dict] = []
     high: list[dict] = []
     lower: list[dict] = []
-    for r in scored:
+    for r in shown:
         if r["score"] >= 3.0:
             critical.append(r)
         elif r["score"] >= 1.5:
@@ -251,13 +264,12 @@ def rebuild_suggested_papers(
     content = tmpl.render(
         last_updated=today,
         total_candidates=len(refs),
-        shown=len(scored),
+        shown=len(shown),
         critical=critical,
         high_priority=high,
         low_priority=lower,
     )
 
-    wiki_dir.mkdir(parents=True, exist_ok=True)
     page_path = wiki_dir / "suggested_papers.md"
     tmp = page_path.with_suffix(".md.tmp")
     tmp.write_text(content, encoding="utf-8")

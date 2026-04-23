@@ -194,7 +194,7 @@ def _build_concept_request(
                 {"role": "system", "content": CONCEPT_SYNTHESIS_SYSTEM},
                 {"role": "user", "content": user_content},
             ],
-            "max_completion_tokens": 6000,
+            "max_completion_tokens": 10000,
         },
     }
 
@@ -256,7 +256,7 @@ def _build_pattern_request(
                 {"role": "system", "content": PATTERN_SYNTHESIS_SYSTEM},
                 {"role": "user", "content": user_content},
             ],
-            "max_completion_tokens": 6000,
+            "max_completion_tokens": 10000,
         },
     }
 
@@ -309,7 +309,7 @@ def _build_style_request(
                 {"role": "system", "content": STYLE_SYNTHESIS_SYSTEM},
                 {"role": "user", "content": user_content},
             ],
-            "max_completion_tokens": 6000,
+            "max_completion_tokens": 10000,
         },
     }
 

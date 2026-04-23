@@ -44,7 +44,8 @@ def test_rebuild_no_unmatched_refs(tmp_path):
     assert "## High priority" not in text
 
 
-def test_rebuild_unmatched_ref_appears(tmp_path):
+def test_rebuild_single_cite_in_json_not_wiki(tmp_path):
+    """A paper cited by only 1 source appears in the JSON sidecar but not the wiki page."""
     wiki = tmp_path / "wiki"
     wiki.mkdir()
     staging = tmp_path / "staging"
@@ -58,8 +59,13 @@ def test_rebuild_unmatched_ref_appears(tmp_path):
         }
     ])
     rebuild_suggested_papers(wiki, reg, staging, "2026-04-15", TEMPLATES_DIR)
+    # Not in wiki page (only 1 citation)
     text = (wiki / "suggested_papers.md").read_text()
-    assert "scVI (Lopez et al., 2018)" in text
+    assert "scVI (Lopez et al., 2018)" not in text
+    # But saved in JSON sidecar
+    data = json.loads((wiki / "suggested_papers.json").read_text())
+    titles = [r["title"] for r in data]
+    assert "scVI (Lopez et al., 2018)" in titles
 
 
 def test_rebuild_ranks_by_reference_count(tmp_path):
@@ -67,17 +73,17 @@ def test_rebuild_ranks_by_reference_count(tmp_path):
     wiki.mkdir()
     staging = tmp_path / "staging"
     staging.mkdir()
-    reg = _make_registry("paper_a", "paper_b", "paper_c")
+    reg = _make_registry("paper_a", "paper_b")
     ref = {
         "target_entity": "scVI (Lopez et al., 2018)",
         "target_doi": "10.1038/s41592-018-0229-2",
         "significance": "high",
     }
-    for pid in ["paper_a", "paper_b", "paper_c"]:
+    for pid in ["paper_a", "paper_b"]:
         _write_roadmap(staging, pid, [ref])
     rebuild_suggested_papers(wiki, reg, staging, "2026-04-15", TEMPLATES_DIR)
     text = (wiki / "suggested_papers.md").read_text()
-    # 3 citing papers → score ≥ 1.5, so paper appears in Critical or High priority
+    # 2 citing papers → meets min_citations=2 default, appears in wiki
     assert ("## Critical" in text or "## High priority" in text)
     assert "scVI (Lopez et al., 2018)" in text
 
@@ -87,10 +93,10 @@ def test_rebuild_is_idempotent(tmp_path):
     wiki.mkdir()
     staging = tmp_path / "staging"
     staging.mkdir()
-    reg = _make_registry("paper_a")
-    _write_roadmap(staging, "paper_a", [
-        {"target_entity": "Unknown Paper", "target_doi": None, "significance": "low"}
-    ])
+    reg = _make_registry("paper_a", "paper_b")
+    ref = {"target_entity": "Unknown Paper", "target_doi": None, "significance": "low"}
+    for pid in ["paper_a", "paper_b"]:
+        _write_roadmap(staging, pid, [ref])
     rebuild_suggested_papers(wiki, reg, staging, "2026-04-15", TEMPLATES_DIR)
     rebuild_suggested_papers(wiki, reg, staging, "2026-04-15", TEMPLATES_DIR)
     text = (wiki / "suggested_papers.md").read_text()
@@ -195,29 +201,35 @@ last_updated: "2026-04-21"
     ])
 
     rebuild_suggested_papers(wiki, reg, staging, "2026-04-21", TEMPLATES_DIR)
+    # Only 1 citation each → not in wiki page, but saved in JSON sidecar
     text = (wiki / "suggested_papers.md").read_text()
-    # Both should appear
-    assert "Foundational work A" in text
-    assert "Foundational work B" in text
-    # Output shows structural scores — both are equal here (no concept links to roadmap refs),
-    # but page is generated without error
-    assert "Showing" in text
+    assert "Foundational work A" not in text
+    assert "Foundational work B" not in text
+    data = json.loads((wiki / "suggested_papers.json").read_text())
+    titles = {r["title"] for r in data}
+    assert "Foundational work A" in titles
+    assert "Foundational work B" in titles
 
 
-def test_top_n_cap_limits_output(tmp_path):
-    """top_n=5 should produce at most 5 entries."""
+def test_min_citations_filters_output(tmp_path):
+    """Only papers cited by >= min_citations sources appear in the wiki page."""
     wiki = tmp_path / "wiki"
     wiki.mkdir()
     staging = tmp_path / "staging"
     staging.mkdir()
-    reg = _make_registry("paper_a")
-    rels = [
-        {"target_entity": f"Missing paper {i}", "target_doi": f"10.1/{i}", "significance": "low"}
-        for i in range(20)
-    ]
-    _write_roadmap(staging, "paper_a", rels)
-    rebuild_suggested_papers(wiki, reg, staging, "2026-04-21", TEMPLATES_DIR, top_n=5)
+    reg = _make_registry("p1", "p2", "p3")
+    # "Popular paper" cited by all 3 sources; "Rare paper" cited by only 1
+    for pid in ["p1", "p2", "p3"]:
+        rels = [{"target_entity": "Popular paper", "target_doi": "10.1/pop", "significance": "high"}]
+        if pid == "p1":
+            rels.append({"target_entity": "Rare paper", "target_doi": "10.1/rare", "significance": "low"})
+        _write_roadmap(staging, pid, rels)
+    rebuild_suggested_papers(wiki, reg, staging, "2026-04-21", TEMPLATES_DIR, min_citations=2)
     text = (wiki / "suggested_papers.md").read_text()
-    # Exactly 5 should be shown
-    count = text.count("### Missing paper")
-    assert count == 5
+    assert "Popular paper" in text
+    assert "Rare paper" not in text
+    # JSON sidecar has both
+    data = json.loads((wiki / "suggested_papers.json").read_text())
+    titles = {r["title"] for r in data}
+    assert "Popular paper" in titles
+    assert "Rare paper" in titles

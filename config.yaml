@@ -13,15 +13,16 @@ zotero:
 extraction:
   model: "gpt-4.1"
   max_papers_per_batch: 50
-  max_tokens_per_request: 4096
+  max_tokens_per_request: 8192
   max_cost_usd: 5.0       # ~60 papers max at current pricing ($0.08/paper)
 
 linking:
   synthesis_model: "gpt-5"
   style_model: "gpt-4.1"
   min_papers_for_concept: 2
+  min_papers_for_pattern: 1
   min_papers_for_style: 2
-  max_cost_usd: 3.0       # covers concept graph architecture with headroom
+  max_cost_usd: 8.0       # concept pages + patterns + styles
 
 sync:
   method: "rsync"

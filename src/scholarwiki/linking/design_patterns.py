@@ -73,10 +73,11 @@ async def cluster_patterns(
     # Build existing title lookup
     existing_title_map = {slug: title for title, slug in existing_pattern_index}
 
+    min_papers = cfg.linking.min_papers_for_pattern
     result = {}
     for slug, paper_ids in assignments.items():
-        if len(paper_ids) < 2:
-            continue  # Spec: patterns require >=2 papers
+        if len(paper_ids) < min_papers:
+            continue
         title = new_titles.get(slug) or existing_title_map.get(slug) or slug.replace("_", " ").title()
         result[slug] = {"paper_ids": paper_ids, "title": title}
 
