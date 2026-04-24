@@ -9,6 +9,7 @@ zotero:
   library_id: "20167090"
   library_type: "user"
   api_key: "${ZOTERO_API_KEY}"
+  collection: "ScholarWiki"
 
 extraction:
   model: "gpt-4.1"

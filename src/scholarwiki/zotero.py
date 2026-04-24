@@ -97,7 +97,7 @@ def push_paper(entry: PaperEntry, cfg: Config) -> Optional[str]:
         return None
     try:
         zot = zotero.Zotero(cfg.zotero.library_id, cfg.zotero.library_type, cfg.zotero.api_key)
-        collection_name = entry.domain_category or "uncategorized"
+        collection_name = cfg.zotero.collection or "ScholarWiki"
         collection_key = _get_or_create_collection(zot, collection_name)
         item = _build_item(entry, collection_key)
         resp = zot.create_items([item])

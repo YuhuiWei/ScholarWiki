@@ -30,6 +30,7 @@ class ZoteroConfig(BaseModel):
     library_id: str = ""
     library_type: str = "user"
     api_key: str = ""
+    collection: str = "ScholarWiki"
 
 
 class ExtractionConfig(BaseModel):
